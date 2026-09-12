@@ -174,3 +174,5 @@ _bmad-output/implementation-artifacts/spec-implement-full-spec.md
 coverage-summary.txt
 regression-guard-coverage.json
 regression-guard-coverage.lcov
+# Dropped in the working directory by an instrumented binary run outside `swift test`.
+default.profraw
