@@ -1,7 +1,9 @@
-import XCTest
+import Foundation
+import Testing
 @testable import RegressionGuardKit
 
-final class CoverageRegressionRuleTests: XCTestCase {
+@Suite("Coverage regression rule tests")
+struct CoverageRegressionRuleTests {
 
   private func report(percent: Double) -> Data {
     let json = """
@@ -10,34 +12,37 @@ final class CoverageRegressionRuleTests: XCTestCase {
     return json.data(using: .utf8)!
   }
 
-  func testFlagsADropBeyondThreshold() throws {
+  @Test("flags a drop beyond the threshold")
+  func flagsADropBeyondThreshold() throws {
     let violations = try CoverageRegressionRule.checkCoverage(
       baseReportJSON: report(percent: 90.0),
       headReportJSON: report(percent: 85.0),
       maxDropPercent: 0.5,
       severity: .error
     )
-    XCTAssertEqual(violations.count, 1)
-    XCTAssertEqual(violations.first?.severity, .error)
+    #expect(violations.count == 1)
+    #expect(violations.first?.severity == .error)
   }
 
-  func testAllowsADropWithinThreshold() throws {
+  @Test("allows a drop within the threshold")
+  func allowsADropWithinThreshold() throws {
     let violations = try CoverageRegressionRule.checkCoverage(
       baseReportJSON: report(percent: 90.0),
       headReportJSON: report(percent: 89.8),
       maxDropPercent: 0.5,
       severity: .error
     )
-    XCTAssertTrue(violations.isEmpty)
+    #expect(violations.isEmpty)
   }
 
-  func testAllowsCoverageIncrease() throws {
+  @Test("allows a coverage increase")
+  func allowsCoverageIncrease() throws {
     let violations = try CoverageRegressionRule.checkCoverage(
       baseReportJSON: report(percent: 90.0),
       headReportJSON: report(percent: 95.0),
       maxDropPercent: 0.5,
       severity: .error
     )
-    XCTAssertTrue(violations.isEmpty)
+    #expect(violations.isEmpty)
   }
 }

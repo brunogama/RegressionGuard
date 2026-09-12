@@ -1,14 +1,20 @@
-import XCTest
+import Foundation
+import Testing
 @testable import GoldenMaster
 
-final class CharacterizationTests: XCTestCase {
+/// `.serialized` because these tests switch recording on and off through the process environment.
+/// Swift Testing runs a suite's tests in parallel by default, which would let one test's
+/// `GM_RECORD` leak into another's verification and silently turn it into a recording - XCTest
+/// ran them one at a time, and that ordering is part of what they assert.
+@Suite("Characterization tests", .serialized)
+struct CharacterizationTests {
 
-  override func setUpWithError() throws {
-    setenv("GM_RECORD", "", 1)
+  init() {
     unsetenv("GM_RECORD")
   }
 
-  func testRecordsThenVerifiesAMatchingSnapshot() throws {
+  @Test("records, then verifies a matching snapshot")
+  func recordsThenVerifiesAMatchingSnapshot() throws {
     setenv("GM_RECORD", "1", 1)
     try Characterization.verify("hello world", identifier: "record")
     unsetenv("GM_RECORD")
@@ -16,25 +22,23 @@ final class CharacterizationTests: XCTestCase {
     try Characterization.verify("hello world", identifier: "record")
   }
 
-  func testMismatchThrows() throws {
+  @Test("a mismatch throws")
+  func mismatchThrows() throws {
     setenv("GM_RECORD", "1", 1)
     try Characterization.verify("version one", identifier: "mismatch")
     unsetenv("GM_RECORD")
 
-    XCTAssertThrowsError(
+    #expect(throws: CharacterizationMismatch.self) {
       try Characterization.verify("version two", identifier: "mismatch")
-    ) { error in
-      XCTAssertTrue(error is CharacterizationMismatch)
     }
   }
 
-  func testMissingSnapshotThrowsByDefault() throws {
+  @Test("a missing snapshot throws by default")
+  func missingSnapshotThrowsByDefault() throws {
     // Use a unique identifier so a previous run's recording can't mask this failing.
     let identifier = "missing-\(UUID().uuidString)"
-    XCTAssertThrowsError(
+    #expect(throws: CharacterizationMissing.self) {
       try Characterization.verify("anything", identifier: identifier)
-    ) { error in
-      XCTAssertTrue(error is CharacterizationMissing)
     }
   }
 
@@ -43,7 +47,8 @@ final class CharacterizationTests: XCTestCase {
     let total: Double
   }
 
-  func testEncodableSnapshotRecordsStableJSON() throws {
+  @Test("an encodable snapshot records stable JSON")
+  func encodableSnapshotRecordsStableJSON() throws {
     setenv("GM_RECORD", "1", 1)
     try Characterization.verify(
       SampleInvoice(id: 1, total: 42.5),

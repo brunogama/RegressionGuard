@@ -1,18 +1,22 @@
-import XCTest
+import Foundation
+import Testing
 @testable import RegressionGuardKit
 
-final class ConfigurationLoaderTests: XCTestCase {
+@Suite("Configuration loader tests")
+struct ConfigurationLoaderTests {
 
-  func testFallsBackToDefaultWhenNoConfigFileExists() {
+  @Test("falls back to default when no config file exists")
+  func fallsBackToDefaultWhenNoConfigFileExists() {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: dir) }
 
     let config = ConfigurationLoader().load(fromDirectory: dir)
-    XCTAssertEqual(config, Configuration.default)
+    #expect(config == Configuration.default)
   }
 
-  func testParsesYAMLRulesIgnoreAndTestPaths() {
+  @Test("parses YAML rules, ignore, and test paths")
+  func parsesYAMLRulesIgnoreAndTestPaths() {
     let yaml = """
       version: 1
       approvalMarker: "custom:approve"
@@ -29,16 +33,17 @@ final class ConfigurationLoaderTests: XCTestCase {
         - "Tests/**"
       """
     let config = ConfigurationLoader.parseYAML(yaml)
-    XCTAssertNotNil(config)
-    XCTAssertEqual(config?.approvalMarker, "custom:approve")
-    XCTAssertEqual(config?.rules["disabled_or_skipped_test"]?.enabled, true)
-    XCTAssertEqual(config?.rules["disabled_or_skipped_test"]?.severity, .error)
-    XCTAssertEqual(config?.rules["production_code_deletion"]?.enabled, false)
-    XCTAssertEqual(config?.ignore, ["**/Generated/**"])
-    XCTAssertEqual(config?.testPaths, ["Tests/**"])
+    #expect(config != nil)
+    #expect(config?.approvalMarker == "custom:approve")
+    #expect(config?.rules["disabled_or_skipped_test"]?.enabled == true)
+    #expect(config?.rules["disabled_or_skipped_test"]?.severity == .error)
+    #expect(config?.rules["production_code_deletion"]?.enabled == false)
+    #expect(config?.ignore == ["**/Generated/**"])
+    #expect(config?.testPaths == ["Tests/**"])
   }
 
-  func testParsesJSONConfig() throws {
+  @Test("parses json config")
+  func parsesJSONConfig() throws {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: dir) }
@@ -58,7 +63,7 @@ final class ConfigurationLoaderTests: XCTestCase {
     )
 
     let config = ConfigurationLoader().load(fromDirectory: dir)
-    XCTAssertEqual(config.approvalMarker, "custom:approve")
-    XCTAssertEqual(config.testPaths, ["Tests/**"])
+    #expect(config.approvalMarker == "custom:approve")
+    #expect(config.testPaths == ["Tests/**"])
   }
 }

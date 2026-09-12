@@ -1,21 +1,24 @@
-import XCTest
+import Testing
 @testable import RegressionGuardKit
 
-final class CharacterizationDriftRuleTests: XCTestCase {
+@Suite("Characterization drift rule tests")
+struct CharacterizationDriftRuleTests {
   let rule = CharacterizationDriftRule()
 
-  func testFlagsUnapprovedSnapshotChange() {
+  @Test("flags an unapproved snapshot change")
+  func flagsUnapprovedSnapshotChange() {
     let diff = TestSupport.fileDiff(
       path: "Sources/__GoldenMasters__/testRender.snapshot.txt",
       removed: ["<old html>"],
       added: ["<new html>"]
     )
     let violations = rule.evaluate(fileDiff: diff, context: TestSupport.context())
-    XCTAssertEqual(violations.count, 1)
-    XCTAssertEqual(violations.first?.severity, .warning)
+    #expect(violations.count == 1)
+    #expect(violations.first?.severity == .warning)
   }
 
-  func testAllowsApprovedSnapshotChange() {
+  @Test("allows an approved snapshot change")
+  func allowsApprovedSnapshotChange() {
     let diff = TestSupport.fileDiff(
       path: "Sources/__GoldenMasters__/testRender.snapshot.txt",
       removed: ["<old html>"],
@@ -25,12 +28,13 @@ final class CharacterizationDriftRuleTests: XCTestCase {
       "Update invoice layout\n\nregression-guard:approve"
     ])
     let violations = rule.evaluate(fileDiff: diff, context: context)
-    XCTAssertTrue(violations.isEmpty)
+    #expect(violations.isEmpty)
   }
 
-  func testIgnoresUnrelatedFiles() {
+  @Test("ignores unrelated files")
+  func ignoresUnrelatedFiles() {
     let diff = TestSupport.fileDiff(path: "Sources/Foo.swift", removed: ["a"], added: ["b"])
     let violations = rule.evaluate(fileDiff: diff, context: TestSupport.context())
-    XCTAssertTrue(violations.isEmpty)
+    #expect(violations.isEmpty)
   }
 }

@@ -1,8 +1,10 @@
-import XCTest
+import Testing
 @testable import RegressionGuardKit
 
-final class GitDiffParserTests: XCTestCase {
-  func testParsesASimpleModifiedFile() {
+@Suite("Git diff parser tests")
+struct GitDiffParserTests {
+  @Test("parses a simple modified file")
+  func parsesASimpleModifiedFile() {
     let raw = """
       diff --git a/Sources/Foo.swift b/Sources/Foo.swift
       index 1234567..89abcde 100644
@@ -16,17 +18,18 @@ final class GitDiffParserTests: XCTestCase {
       """
 
     let files = GitDiffParser().parse(raw)
-    XCTAssertEqual(files.count, 1)
+    #expect(files.count == 1)
     let file = files[0]
-    XCTAssertEqual(file.oldPath, "Sources/Foo.swift")
-    XCTAssertEqual(file.newPath, "Sources/Foo.swift")
-    XCTAssertFalse(file.isDeleted)
-    XCTAssertFalse(file.isAdded)
-    XCTAssertEqual(file.removedLines.map { $0.text }, ["    return 1"])
-    XCTAssertEqual(file.addedLines.map { $0.text }, ["    return 2"])
+    #expect(file.oldPath == "Sources/Foo.swift")
+    #expect(file.newPath == "Sources/Foo.swift")
+    #expect(!file.isDeleted)
+    #expect(!file.isAdded)
+    #expect(file.removedLines.map { $0.text } == ["    return 1"])
+    #expect(file.addedLines.map { $0.text } == ["    return 2"])
   }
 
-  func testParsesADeletedFile() {
+  @Test("parses a deleted file")
+  func parsesADeletedFile() {
     let raw = """
       diff --git a/Tests/FooTests.swift b/Tests/FooTests.swift
       deleted file mode 100644
@@ -40,13 +43,14 @@ final class GitDiffParserTests: XCTestCase {
       """
 
     let files = GitDiffParser().parse(raw)
-    XCTAssertEqual(files.count, 1)
-    XCTAssertTrue(files[0].isDeleted)
-    XCTAssertEqual(files[0].oldPath, "Tests/FooTests.swift")
-    XCTAssertNil(files[0].newPath)
+    #expect(files.count == 1)
+    #expect(files[0].isDeleted)
+    #expect(files[0].oldPath == "Tests/FooTests.swift")
+    #expect(files[0].newPath == nil)
   }
 
-  func testParsesMultipleFilesInOneDiff() {
+  @Test("parses multiple files in one diff")
+  func parsesMultipleFilesInOneDiff() {
     let raw = """
       diff --git a/A.swift b/A.swift
       index 111..222 100644
@@ -65,8 +69,8 @@ final class GitDiffParserTests: XCTestCase {
       """
 
     let files = GitDiffParser().parse(raw)
-    XCTAssertEqual(files.count, 2)
-    XCTAssertEqual(files[0].newPath, "A.swift")
-    XCTAssertEqual(files[1].newPath, "B.swift")
+    #expect(files.count == 2)
+    #expect(files[0].newPath == "A.swift")
+    #expect(files[1].newPath == "B.swift")
   }
 }
