@@ -42,7 +42,9 @@ struct Check: ParsableCommand {
     }
 
     let runner = RegressionGuardRunner(repositoryDirectory: URL(fileURLWithPath: path))
-    let violations = try runner.check(base: base, head: head)
+    let result = try runner.evaluate(base: base, head: head)
+    let violations = result.violations
+    Self.reportEvidenceGaps(result.syntacticEvidenceGaps)
     let hasBlockingFinding = violations.contains { $0.severity >= threshold }
     let report = GuardReport(
       toolVersion: "0.1.0",
@@ -67,6 +69,25 @@ struct Check: ParsableCommand {
 
     if hasBlockingFinding {
       throw ExitCode.failure
+    }
+  }
+
+  /// Names every hole in the syntactic evidence on stderr, so a degraded run never looks clean.
+  ///
+  /// Stdout stays exactly the findings the chosen format promises, and the report itself carries
+  /// the gaps once its schema version allows it.
+  private static func reportEvidenceGaps(_ gaps: [SyntaxEvidenceGap]) {
+    guard !gaps.isEmpty else { return }
+    let byPath = Dictionary(grouping: gaps, by: \.path)
+    Console.writeError(
+      "regression-guard: syntactic evidence incomplete for \(byPath.count) file(s) - "
+        + "syntax-backed rules ran degraded and may have missed findings."
+    )
+    for (path, fileGaps) in byPath.sorted(by: { $0.key < $1.key }) {
+      let refs = fileGaps.map(\.ref.rawValue).sorted().joined(separator: ", ")
+      let reasons = Set(fileGaps.map(\.reason.rawValue)).sorted().joined(separator: ", ")
+      let detail = fileGaps.compactMap(\.detail).first.map { " - \($0)" } ?? ""
+      Console.writeError("  \(path) (\(refs)): \(reasons)\(detail)")
     }
   }
 
@@ -187,5 +208,9 @@ struct Init: ParsableCommand {
 private enum Console {
   static func write(_ text: String) {
     FileHandle.standardOutput.write(Data((text + "\n").utf8))
+  }
+
+  static func writeError(_ text: String) {
+    FileHandle.standardError.write(Data((text + "\n").utf8))
   }
 }
