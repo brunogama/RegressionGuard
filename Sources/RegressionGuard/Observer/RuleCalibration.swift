@@ -14,6 +14,14 @@ public struct RuleCalibration: Codable, Equatable, Sendable {
     reviewedFindingCount >= Self.reviewThreshold
   }
 
+  /// `true` when a human has judged at least one of this rule's findings.
+  ///
+  /// The distinction an upgrade makes load-bearing. A rule family a repository has just acquired
+  /// has no reviews, and `falsePositiveRate == nil` alone is ambiguous between "nobody has looked"
+  /// and "nothing to compute a rate from". A reader promoting a rule to blocking needs to know
+  /// which, and absence of evidence must never be presented as evidence of accuracy.
+  public var hasReviewHistory: Bool { reviewedFindingCount > 0 }
+
   public init(ruleID: String, findings: [ObservedFinding]) {
     self.ruleID = ruleID
     findingCount = findings.count

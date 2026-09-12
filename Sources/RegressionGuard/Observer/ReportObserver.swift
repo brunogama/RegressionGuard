@@ -24,8 +24,14 @@ public struct ReportObserver {
         reviewReference: assessment?.reference
       )
     }
-    let calibrations = Dictionary(grouping: findings, by: \.ruleID)
-      .map { RuleCalibration(ruleID: $0.key, findings: $0.value) }
+    // Every rule the run reports having enabled gets a calibration, not only the ones that fired.
+    // A family that ran and found nothing leaves no findings to group, so grouping alone would
+    // drop it from the artifact entirely - and an absent rule reads like a rule that was never
+    // there, which is exactly the reading an upgrade makes dangerous.
+    let findingsByRule = Dictionary(grouping: findings, by: \.ruleID)
+    let ruleIDs = Set(findingsByRule.keys).union(report.rules.map(\.ruleID))
+    let calibrations = ruleIDs
+      .map { RuleCalibration(ruleID: $0, findings: findingsByRule[$0] ?? []) }
       .sorted { $0.ruleID < $1.ruleID }
     return ReportObservation(
       runID: report.runID,

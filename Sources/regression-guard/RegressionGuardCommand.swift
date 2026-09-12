@@ -54,7 +54,12 @@ struct Check: AsyncParsableCommand {
       headRef: head ?? "working-tree",
       runID: head ?? "working-tree",
       exitStatus: hasBlockingFinding ? 1 : 0,
-      findings: violations
+      findings: violations,
+      syntacticEvidenceGaps: result.syntacticEvidenceGaps,
+      syntaxGrammar: result.syntaxGrammar,
+      rules: result.ruleSeverities
+        .map { ReportedRule(ruleID: $0.key, severity: $0.value, failOn: threshold) }
+        .sorted { $0.ruleID < $1.ruleID }
     )
 
     if let reportFile {
@@ -75,8 +80,9 @@ struct Check: AsyncParsableCommand {
 
   /// Names every hole in the syntactic evidence on stderr, so a degraded run never looks clean.
   ///
-  /// Stdout stays exactly the findings the chosen format promises, and the report itself carries
-  /// the gaps once its schema version allows it.
+  /// Stdout stays exactly the findings the chosen format promises. The report carries the same
+  /// gaps in `syntacticEvidenceGaps`, so this is the human-facing half of a record that also
+  /// survives in the artifact.
   private static func reportEvidenceGaps(_ gaps: [SyntaxEvidenceGap]) {
     guard !gaps.isEmpty else { return }
     let byPath = Dictionary(grouping: gaps, by: \.path)
@@ -113,49 +119,6 @@ struct Check: AsyncParsableCommand {
         + "\(SyntaxGrammar.pinnedAlignmentSeries) this guard targets - "
         + "syntax newer than that grammar may be read incorrectly and missed entirely."
     )
-  }
-
-  private var formatter: ViolationFormatter {
-    switch format {
-    case "json": return JSONFormatter()
-    case "github": return GitHubAnnotationFormatter()
-    default: return TextFormatter()
-    }
-  }
-}
-
-struct Coverage: ParsableCommand {
-  static let configuration = CommandConfiguration(
-    commandName: "coverage",
-    abstract: "Compare two `llvm-cov export` JSON reports and fail on a coverage drop."
-  )
-
-  @Option(name: .long, help: "Path to the base ref's llvm-cov export JSON.")
-  var baseReport: String
-
-  @Option(name: .long, help: "Path to the head ref's llvm-cov export JSON.")
-  var headReport: String
-
-  @Option(name: .long, help: "Maximum allowed coverage drop, in percentage points.")
-  var maxDropPercent: Double = 0.5
-
-  @Option(name: .long, help: "text, json, or github.")
-  var format: String = "text"
-
-  func run() throws {
-    let baseData = try Data(contentsOf: URL(fileURLWithPath: baseReport))
-    let headData = try Data(contentsOf: URL(fileURLWithPath: headReport))
-    let violations = try CoverageRegressionRule.checkCoverage(
-      baseReportJSON: baseData,
-      headReportJSON: headData,
-      maxDropPercent: maxDropPercent,
-      severity: .error
-    )
-
-    Console.write(formatter.format(violations))
-    if !violations.isEmpty {
-      throw ExitCode.failure
-    }
   }
 
   private var formatter: ViolationFormatter {
@@ -215,6 +178,19 @@ struct Init: ParsableCommand {
         enabled: true
         severity: error
 
+      # Advisory families that need parsed syntax. They report at `warning`, which the default
+      # `--fail-on error` does not block on, so they are visible without turning a build red.
+      # Raise a severity to `error` to adopt one, or set `enabled: false` to defer it.
+      known_issue_suppression:
+        enabled: true
+        severity: warning
+      implementation_stubbed:
+        enabled: true
+        severity: warning
+      unreachable_assertion:
+        enabled: true
+        severity: warning
+
     ignore:
       - "**/.build/**"
       - "**/Generated/**"
@@ -227,14 +203,4 @@ struct Init: ParsableCommand {
       - "**/*Spec.swift"
 
     """
-}
-
-private enum Console {
-  static func write(_ text: String) {
-    FileHandle.standardOutput.write(Data((text + "\n").utf8))
-  }
-
-  static func writeError(_ text: String) {
-    FileHandle.standardError.write(Data((text + "\n").utf8))
-  }
 }

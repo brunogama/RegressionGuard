@@ -96,6 +96,13 @@ public struct GuardFinding: Codable, Equatable, Sendable {
   public let evidenceReferences: [String]
   public let approved: Bool
   public let remediation: String?
+  /// What this finding was judged on: the diff, parsed syntax, or the text approximation of a
+  /// syntax detection whose tree never arrived.
+  ///
+  /// Deferred here by the text rule migration contract, which kept the envelope at version 1
+  /// until this ticket could bump it. A degraded finding is the weaker claim, and one that cannot
+  /// say so reads exactly like the sharper one.
+  public let evidence: ViolationEvidence
 
   public init(
     violation: Violation,
@@ -104,6 +111,7 @@ public struct GuardFinding: Codable, Equatable, Sendable {
     approved: Bool = false,
     remediation: String? = nil
   ) {
+    self.evidence = violation.evidence
     self.id = Self.makeID(for: violation)
     self.ruleID = violation.ruleID
     self.severity = violation.severity
@@ -164,6 +172,23 @@ public struct GuardReport: Codable, Equatable, Sendable {
   public let runID: String
   public let exitStatus: Int
   public let findings: [GuardFinding]
+  /// Every hole in the syntactic evidence this run was judged on.
+  ///
+  /// In the report, not only on stderr. A report is the artifact a repository keeps, audits, and
+  /// feeds to the observer; a degraded run whose report looks identical to a clean one is the
+  /// implicit pass the evidence bundle exists to forbid, and log output does not survive.
+  public let syntacticEvidenceGaps: [SyntaxEvidenceGap]
+  /// The swift-syntax grammar the syntax-aware rules were judged with, absent when the run had
+  /// no parser.
+  ///
+  /// Deferred here by the version pin and grammar coverage decision. Without it, a clean report
+  /// from an under-selected parser is indistinguishable from a clean report from a current one.
+  public let syntaxGrammar: SyntaxGrammar?
+  /// The rules that ran, and whether each could have failed the build.
+  ///
+  /// An upgrade brings rule IDs no existing configuration mentions. Listing what ran is what lets
+  /// a reader tell a family that found nothing from one that was never present.
+  public let rules: [ReportedRule]
 
   public init(
     toolVersion: String,
@@ -172,9 +197,17 @@ public struct GuardReport: Codable, Equatable, Sendable {
     headRef: String,
     runID: String,
     exitStatus: Int = 0,
-    findings: [Violation]
+    findings: [Violation],
+    syntacticEvidenceGaps: [SyntaxEvidenceGap] = [],
+    syntaxGrammar: SyntaxGrammar? = nil,
+    rules: [ReportedRule] = []
   ) {
-    self.schemaVersion = 1
+    // Version 2. Three fields arrive at once - a finding's evidence, the run's grammar, and the
+    // gaps - and every one of them exists so a weaker run cannot read as a stronger one.
+    self.schemaVersion = 2
+    self.syntacticEvidenceGaps = syntacticEvidenceGaps
+    self.syntaxGrammar = syntaxGrammar
+    self.rules = rules
     self.toolVersion = toolVersion
     self.repository = repository
     self.baseRef = baseRef

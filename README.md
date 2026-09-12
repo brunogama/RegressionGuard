@@ -205,6 +205,53 @@ a baseline, deleting a truly obsolete test), and it leaves a paper trail in the 
 | `golden_master_drift` | warning | a recorded `__GoldenMasters__` snapshot changing without the approval marker |
 | `coverage_regression` | error | overall line coverage dropping beyond `--max-drop-percent` between base and head |
 
+These families need parsed syntax and are **advisory**: they report at `warning`, which the
+default `--fail-on error` does not block on.
+
+| Rule ID | Default severity | Catches |
+|---|---|---|
+| `known_issue_suppression` | warning (advisory) | a `withKnownIssue { }` introduced around a failing test, absorbing its failure rather than fixing it |
+| `implementation_stubbed` | warning (advisory) | a function or initialiser whose real body was replaced by `fatalError`, `preconditionFailure`, or a constant return |
+| `unreachable_assertion` | warning (advisory) | an assertion moved under a literal `if false`, or left after an unconditional `return`/`throw` in the same block |
+
+## Upgrading to a syntax-aware guard
+
+Two things move at once, and both are visible in the report rather than only in the log.
+
+**Existing rule IDs get sharper.** `disabled_or_skipped_test`, `weakened_assertion`,
+`behavior_deletion`, and `error_handling_collapse` now read parsed syntax where a tree is
+available. They keep their current severity, so nothing that was advisory becomes blocking - but
+they will report findings on code your repository never touched, because the line matcher they
+replace missed those cases. A tautological `#expect(1 == 1)` spread over two lines, a
+`@Suite(.disabled)` covering a whole suite, and a `return` the old matcher counted inside a string
+literal are the common ones.
+
+**Three new advisory rule IDs appear**, listed above. No existing configuration mentions them, so
+they run at their defaults. To **adopt** one, set its severity to `error` in
+`.regressionguard.yml`. To **defer** one, set `enabled: false`:
+
+```yaml
+rules:
+  implementation_stubbed:
+    enabled: false
+```
+
+**The report envelope is now `schemaVersion: 2.`** Consumers reading version 1 keep working for
+every field they already read; the additions are:
+
+| Field | Why |
+|---|---|
+| `findings[].evidence` | `diff`, `syntax`, or `degradedDiff` - a finding reached without the tree its rule asked for is the weaker claim and now says so |
+| `syntacticEvidenceGaps` | every file whose syntax could not be read, so a degraded run cannot be mistaken for a clean one after the fact |
+| `syntaxGrammar` | the swift-syntax alignment series that judged the run, absent when no parser was available |
+| `rules` | every rule that ran and whether it could fail the build, so a family that found nothing can be told from one that was never present |
+
+**If your build is about to turn red**, it is an existing blocking rule reporting something the
+line matcher used to miss - none of the new families can do it at their defaults. Read the
+finding's `evidence` field first: `degradedDiff` means the sharper check could not run and the
+finding stands at text precision. Then either fix the finding, or lower that rule's severity in
+`.regressionguard.yml` while you work through the backlog.
+
 ## Architecture
 
 ```

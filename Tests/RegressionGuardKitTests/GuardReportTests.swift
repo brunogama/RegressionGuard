@@ -28,7 +28,7 @@ struct GuardReportTests {
       JSONSerialization.jsonObject(with: data) as? [String: Any]
     )
 
-    #expect(object["schemaVersion"] as? Int == 1)
+    #expect(object["schemaVersion"] as? Int == 2)
     #expect(object["toolVersion"] as? String == "0.1.0")
     #expect(object["runID"] as? String == "HEAD")
     #expect((object["findings"] as? [[String: Any]])?.count == 1)

@@ -13,15 +13,23 @@ public struct RuleEngine {
     /// belongs to Report version and compatibility, which owns the schema bump. The run still
     /// needs it here: an under-selected grammar is the one degradation the trees cannot reveal.
     public let syntaxGrammar: SyntaxGrammar?
+    /// The severity each enabled rule reported at, keyed by rule ID.
+    ///
+    /// A run knows which families it actually asked; nothing downstream can reconstruct that from
+    /// the findings, because a family that found nothing leaves none. Reported so a clean result
+    /// can be told from an absent rule.
+    public let ruleSeverities: [String: Severity]
 
     public init(
       violations: [Violation],
       syntacticEvidenceGaps: [SyntaxEvidenceGap] = [],
-      syntaxGrammar: SyntaxGrammar? = nil
+      syntaxGrammar: SyntaxGrammar? = nil,
+      ruleSeverities: [String: Severity] = [:]
     ) {
       self.violations = violations
       self.syntacticEvidenceGaps = syntacticEvidenceGaps
       self.syntaxGrammar = syntaxGrammar
+      self.ruleSeverities = ruleSeverities
     }
   }
 
@@ -101,7 +109,11 @@ public struct RuleEngine {
       violations: violations,
       syntacticEvidenceGaps: resolved.syntax.gaps
         + resolved.syntax.grammarGaps(for: resolved.fileDiffs),
-      syntaxGrammar: syntacticEvidenceProvider?.grammar
+      syntaxGrammar: syntacticEvidenceProvider?.grammar,
+      ruleSeverities: Dictionary(
+        enabled.map { (type(of: $0.rule).ruleID, $0.settings.severity) },
+        uniquingKeysWith: { _, last in last }
+      )
     )
   }
 

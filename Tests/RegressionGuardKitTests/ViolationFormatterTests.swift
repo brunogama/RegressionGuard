@@ -49,7 +49,7 @@ struct ViolationFormatterTests {
 
     let output = try JSONReportFormatter().format(report)
 
-    #expect(output.contains("\"schemaVersion\" : 1"))
+    #expect(output.contains("\"schemaVersion\" : 2"))
     #expect(output.contains("\"example_rule\""))
   }
 
