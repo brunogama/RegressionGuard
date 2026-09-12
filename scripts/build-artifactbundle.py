@@ -20,7 +20,10 @@ EXECUTABLES = ["regression-guard", "regression-guard-observer"]
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--version", required=True, help="Release version, for example 0.1.0")
-parser.add_argument("--output", type=pathlib.Path, default=pathlib.Path(".build/artifacts"))
+# Not `.build/artifacts`: that directory belongs to SwiftPM, which clears it when it
+# resolves binary targets - and this repository now declares one, so a bundle written
+# there disappears the next time anything resolves.
+parser.add_argument("--output", type=pathlib.Path, default=pathlib.Path(".build/dist"))
 args = parser.parse_args()
 
 source = pathlib.Path(__file__).resolve().parents[1]
