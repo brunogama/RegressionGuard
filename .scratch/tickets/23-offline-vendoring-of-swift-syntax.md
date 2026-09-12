@@ -146,8 +146,22 @@ The resolver cannot see one drift: the declared range diverging from
 `SyntaxGrammar.pinnedAlignmentSeries`. `prepare-offline-validation.py` checks exactly that and
 nothing else about swift-syntax, since the resolver owns the rest.
 
-Commander is still a sibling checkout at `../Commander`, so an offline build is not yet free of
-network setup. The same treatment applies to it unchanged.
+Commander now carries the same arrangement - `Vendor/Commander.git` at `v0.2.4`, referenced as
+`.package(url: "Vendor/Commander.git", from: "0.2.4")` - so `Package.local.swift` names no sibling
+checkout at all and an offline build needs no setup step whatever. That removes the last reason the
+harness had to look outside the repository: `--vendor-root`, the clone-URL table, and the
+missing-checkout errors are all gone, and what remains is the range-versus-constant check the
+resolver cannot do.
+
+The claim is verified rather than inferred. Built against an empty SwiftPM cache with
+`--cache-path`, so nothing could come from a previously fetched copy, the only repositories
+SwiftPM fetches are the two local `Vendor/*.git` paths, and all 248 tests pass. Total committed
+cost is 3.2 MiB - 1.8 for swift-syntax, 1.4 for Commander - against a history that was 1.0 MiB
+packed before either.
+
+One cosmetic warning is expected and harmless when re-cloning Commander: `refs/tags/v0.2.4 ... is
+not a commit`, because the tag is annotated. Git peels it into `packed-refs` regardless and SwiftPM
+resolves `0.2.4` at `bd219c4e`.
 
 ### Strictness is a manifest setting offline, not a command-line one
 

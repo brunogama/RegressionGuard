@@ -20,7 +20,11 @@ let package = Package(
     .plugin(name: "RegressionGuardPlugin", targets: ["RegressionGuardPlugin"]),
   ],
   dependencies: [
-    .package(path: "../Commander"),
+    // Vendored the same way and for the same reasons as swift-syntax below: a bare repository
+    // committed into this one, referenced as local source control so the resolver enforces the
+    // version and records it, and named only here so it never takes the `commander` identity in a
+    // consumer's dependency graph.
+    .package(url: "Vendor/Commander.git", from: "0.2.4"),
     // A bare git repository committed into this one, not a path dependency. The distinction is the
     // whole point: a path dependency gets no `Package.resolved` entry and no version, so the
     // checkout would be its own pin. Referenced as local source control, the resolver reads the
