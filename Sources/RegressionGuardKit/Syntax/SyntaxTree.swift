@@ -88,9 +88,14 @@ public struct SyntaxNode: Codable, Equatable, Sendable {
   public let name: String?
   /// Attribute names written on this node, without the leading `@`.
   public let attributes: [String]
-  /// Comment text from this node's own leading and trailing trivia, in source order. Approval
-  /// markers ride in comments, and upstream leaves trivia attachment undocumented, so the
-  /// projection keeps both sides on the node they were written against.
+  /// Comment text from this node's own leading and trailing trivia, in source order.
+  ///
+  /// Approval markers ride in comments, so a missed comment is a missed approval. The projection
+  /// owes all four comment trivia cases - `lineComment`, `blockComment`, `docLineComment`,
+  /// `docBlockComment` - from leading and trailing trivia both, because upstream leaves trivia
+  /// attachment undocumented and a marker can land on either side of the node it authorizes.
+  /// Read comments through a sweep (`allComments`, `hasComment(containing:)`) rather than off one
+  /// node, for the same reason.
   public let comments: [String]
   public let children: [Self]
 
@@ -118,6 +123,25 @@ public struct SyntaxNode: Codable, Equatable, Sendable {
   /// This node and everything below it, depth first in source order.
   public var selfAndDescendants: [Self] { [self] + descendants }
 
+  /// The lines where this node's own syntax is written: its span, less the interior of every
+  /// child.
+  ///
+  /// A child's first line is kept, because a body's opening brace usually sits on the very
+  /// signature line that identifies the declaration - subtracting the whole child span would
+  /// leave a single-line signature owning nothing. Everything below that line belongs to the
+  /// child, so a body edit is not mistaken for a change to the declaration around it.
+  ///
+  /// Two costs follow from working off spans alone, both bounded by how the projection shapes a
+  /// node's children: an edit to a lone `{` line counts as the declaration's own, and a
+  /// multi-line signature whose later lines are projected as a child loses them to that child.
+  public var ownLines: Set<Int> {
+    var lines = Set(span.lineNumbers)
+    for child in children where child.span.end > child.span.start {
+      lines.subtract((child.span.start + 1)...child.span.end)
+    }
+    return lines
+  }
+
   public func hasAttribute(named name: String) -> Bool {
     attributes.contains(name)
   }
@@ -137,6 +161,14 @@ public struct SyntaxNode: Codable, Equatable, Sendable {
   /// Comment trivia from this node and everything below it, in source order.
   public var allComments: [String] {
     selfAndDescendants.flatMap(\.comments)
+  }
+
+  /// - Returns: `true` when `text` appears in a comment on this node or anything below it,
+  ///   ignoring case. The sweep is deliberate: trivia attachment is undocumented upstream, so an
+  ///   approval marker written against a declaration can land on a neighbouring node.
+  public func hasComment(containing text: String) -> Bool {
+    let needle = text.lowercased()
+    return allComments.contains { $0.lowercased().contains(needle) }
   }
 }
 
@@ -184,4 +216,9 @@ public struct SyntaxTree: Codable, Equatable, Sendable {
 
   /// Every comment in the file, for approval-marker sweeps.
   public var comments: [String] { root.allComments }
+
+  /// - Returns: `true` when `text` appears in any comment in the file, ignoring case.
+  public func hasComment(containing text: String) -> Bool {
+    root.hasComment(containing: text)
+  }
 }

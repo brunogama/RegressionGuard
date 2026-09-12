@@ -101,6 +101,45 @@ struct SyntaxTreeTests {
     #expect(tree.comments.count == 2)
   }
 
+  @Test("a marker in a comment is found wherever trivia attached it")
+  func commentMarkerSweep() {
+    let tree = Self.sampleTree()
+
+    #expect(tree.hasComment(containing: "regression-guard:approve"))
+    #expect(tree.hasComment(containing: "REGRESSION-GUARD:APPROVE"))
+    #expect(!tree.hasComment(containing: "regression-guard:ignore"))
+    // Found from any ancestor, not just the node it was written against.
+    #expect(tree.root.hasComment(containing: "regression-guard:approve"))
+  }
+
+  @Test("a node's own lines exclude its children's interiors")
+  func ownLines() {
+    let test = Self.sampleTree().root.descendants.first { $0.name == "testAnswer" }
+
+    // `func testAnswer()` on line 2, body open on line 3 and running to line 5. Line 3 stays the
+    // declaration's own, because a body's brace as often as not sits on the signature line and
+    // the projection cannot tell the two layouts apart from spans alone.
+    #expect(test?.ownLines == [2, 3])
+  }
+
+  @Test("a childless node owns every line of its span")
+  func childlessNodeOwnsItsSpan() {
+    let node = SyntaxNode(kind: .functionCallExpr, span: LineSpan(start: 4, end: 6))
+
+    #expect(node.ownLines == [4, 5, 6])
+  }
+
+  @Test("a node keeps the line a multi-line child opens on")
+  func nodeKeepsTheLineAChildOpensOn() {
+    let node = SyntaxNode(
+      kind: .functionDecl,
+      span: LineSpan(start: 1, end: 4),
+      children: [SyntaxNode(kind: .codeBlock, span: LineSpan(start: 1, end: 4))]
+    )
+
+    #expect(node.ownLines == [1])
+  }
+
   @Test("a recovered parse is usable but flagged")
   func recoveredParseIsFlagged() {
     let tree = SyntaxTree(
