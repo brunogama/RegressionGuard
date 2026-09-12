@@ -45,6 +45,9 @@ struct GuardReportTests {
       "review_escape",
       "golden_master_drift",
       "coverage_regression",
+      "known_issue_suppression",
+      "implementation_stubbed",
+      "unreachable_assertion",
     ]
     let remediations = knownRules.compactMap { report(for: $0).findings.first?.remediation }
     let disabledTestHint = report(for: "disabled_or_skipped_test").findings.first?.remediation

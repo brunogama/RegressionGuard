@@ -44,6 +44,11 @@ public struct RuleEngine {
       WeakenedAssertionRule(),
       ControlFlowDeletionRule(),
       UncheckedErrorPathRule(),
+      // AST-only families. New rule IDs, so they ship advisory and no existing configuration
+      // mentions them; promotion to blocking runs through the observer's calibration path.
+      KnownIssueSuppressionRule(),
+      ImplementationStubbedRule(),
+      UnreachableAssertionRule(),
       GuardConfigurationWeakeningRule(),
       ReviewEscapeRule(),
       CoverageRegressionRule(),

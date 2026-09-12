@@ -122,27 +122,35 @@ public struct GuardFinding: Codable, Equatable, Sendable {
     return "\(violation.ruleID)|\(violation.file)|\(line)|\(violation.message)"
   }
 
+  /// Deterministic, evidence-bounded remediation per rule, keyed by rule ID.
+  ///
+  /// A table rather than a `switch`: one entry per family, so adding a rule is a line here and
+  /// cannot push a control-flow budget over. A rule with no entry gets no hint, which is the
+  /// honest answer for one nobody has written guidance for yet.
+  private static let remediationByRuleID: [String: String] = [
+    "disabled_or_skipped_test": "Restore test execution. Do not disable or skip tests.",
+    "weakened_assertion": "Restore meaningful assertions. Do not weaken or delete assertions.",
+    "behavior_deletion": "Restore or explicitly replace the removed validation behavior.",
+    "error_handling_collapse":
+      "Restore explicit error or optional handling for the failure path.",
+    "enforcement_weakening":
+      "Restore enforcement. Do not lower thresholds, disable rules, or hide findings.",
+    "review_escape":
+      "Move the change into a reviewed path or explicitly review generated source.",
+    "golden_master_drift":
+      "Review the snapshot change before adding its configured approval marker.",
+    "coverage_regression":
+      "Add meaningful tests. Do not lower coverage thresholds to pass the check.",
+    "known_issue_suppression":
+      "Fix the failing behavior, or justify the known issue with a tracking reference.",
+    "implementation_stubbed":
+      "Restore the implementation. Do not replace a body with a trap or a constant.",
+    "unreachable_assertion":
+      "Move the assertion back where it runs. Do not strand it behind an exit.",
+  ]
+
   private static func remediation(for violation: Violation) -> String? {
-    switch violation.ruleID {
-    case "disabled_or_skipped_test":
-      return "Restore test execution. Do not disable or skip tests."
-    case "weakened_assertion":
-      return "Restore meaningful assertions. Do not weaken or delete assertions."
-    case "behavior_deletion":
-      return "Restore or explicitly replace the removed validation behavior."
-    case "error_handling_collapse":
-      return "Restore explicit error or optional handling for the failure path."
-    case "enforcement_weakening":
-      return "Restore enforcement. Do not lower thresholds, disable rules, or hide findings."
-    case "review_escape":
-      return "Move the change into a reviewed path or explicitly review generated source."
-    case "golden_master_drift":
-      return "Review the snapshot change before adding its configured approval marker."
-    case "coverage_regression":
-      return "Add meaningful tests. Do not lower coverage thresholds to pass the check."
-    default:
-      return nil
-    }
+    remediationByRuleID[violation.ruleID]
   }
 }
 

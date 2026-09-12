@@ -102,8 +102,8 @@ struct ShortcutRegressionRuleTests {
     #expect(findings.map(\.ruleID) == [ReviewEscapeRule.ruleID])
   }
 
-  @Test("default engine keeps the configured eight rule families")
-  func defaultEngineKeepsConfiguredEightRuleFamilies() {
+  @Test("default engine keeps the configured rule families")
+  func defaultEngineKeepsConfiguredRuleFamilies() {
     let ruleIDs = Set(RuleEngine.defaultRules.map { type(of: $0).ruleID })
     let expected = Set([
       "disabled_or_skipped_test",
@@ -114,6 +114,10 @@ struct ShortcutRegressionRuleTests {
       "coverage_regression",
       "enforcement_weakening",
       "review_escape",
+      // AST-only families, advisory by default.
+      "known_issue_suppression",
+      "implementation_stubbed",
+      "unreachable_assertion",
     ])
 
     #expect(ruleIDs == expected)

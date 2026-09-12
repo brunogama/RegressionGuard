@@ -36,6 +36,23 @@ public extension SyntaxNode {
     String(spelling.prefix { $0 != "(" }).trimmingCharacters(in: .whitespaces)
   }
 
+  /// The statements this node holds, in source order, in either projection shape.
+  ///
+  /// swift-syntax puts a block's statements inside a `CodeBlockItemList` rather than directly
+  /// under the block, and a faithful projection may keep that list as a node of its own. A rule
+  /// reading `children` alone would then see one list where it expected the statements, find no
+  /// `returnStmt` and no trap, and conclude the body was fine - silence, not error, which is the
+  /// failure this projection is most prone to. Both shapes are read, and both are pinned by
+  /// tests.
+  var statements: [Self] {
+    children.flatMap { $0.kind == .codeBlockItemList ? $0.children : [$0] }
+  }
+
+  /// The statements of this declaration's body, in either projection shape.
+  var bodyStatements: [Self] {
+    children.first { $0.kind == .codeBlock }?.statements ?? []
+  }
+
   /// Nodes at or below this one that declare or reference `name`.
   func nodes(named name: String) -> [Self] {
     selfAndDescendants.filter { $0.name == name }
