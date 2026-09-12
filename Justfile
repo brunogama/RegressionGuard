@@ -49,6 +49,17 @@ observe base="main":
 plugin:
     swift package regression-guard
 
+# Build the universal CLI artifact bundle and print the checksum `Package.swift` needs.
+artifactbundle version:
+    python3 scripts/build-artifactbundle.py --version "{{version}}"
+
+# Build and test a disposable offline copy, as a machine with no network would.
+offline dir="/tmp/regression-guard-offline":
+    rm -rf "{{dir}}"
+    python3 scripts/prepare-offline-validation.py "{{dir}}"
+    swift build --package-path "{{dir}}" --build-tests
+    swift test --package-path "{{dir}}"
+
 # Drop build products and generated coverage evidence.
 clean:
     rm -rf .build
