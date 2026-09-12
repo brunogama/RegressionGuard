@@ -8,11 +8,12 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 jobs:
   package-tests:
     name: Build and test package
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -66,9 +67,15 @@ jobs:
           path: |
             coverage-summary.txt
             regression-guard-coverage.json
+
+      - name: Cancel parallel pull-request workflows
+        if: ${{ failure() }}
+        uses: ./.github/actions/cancel-parallel-workflows
+        with:
+          head-sha: ${{ github.event.pull_request.head.sha }}
   regression-guard:
     name: Check pull request diff
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -180,3 +187,9 @@ jobs:
             exit 2
           fi
           exit "$GUARD_STATUS"
+
+      - name: Cancel parallel pull-request workflows
+        if: ${{ failure() }}
+        uses: ./.github/actions/cancel-parallel-workflows
+        with:
+          head-sha: ${{ github.event.pull_request.head.sha }}

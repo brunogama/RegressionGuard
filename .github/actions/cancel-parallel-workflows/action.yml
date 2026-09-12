@@ -1,0 +1,23 @@
+name: Cancel parallel pull-request workflows
+description: Cancels in-progress workflows for the same pull-request commit.
+inputs:
+  head-sha:
+    description: Pull-request head SHA whose in-progress workflows must stop.
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        HEAD_SHA: ${{ inputs.head-sha }}
+      run: |
+        set -euo pipefail
+        endpoint="repos/${GITHUB_REPOSITORY}/actions/runs"
+        query="head_sha=${HEAD_SHA}&status=in_progress&per_page=100"
+        gh api --paginate \
+          "${endpoint}?${query}" \
+          --jq '.workflow_runs[].id' |
+          while read -r run_id; do
+            gh api --method POST "${endpoint}/${run_id}/cancel" || true
+          done
