@@ -7,10 +7,21 @@ public struct RuleEngine {
   public struct Result: Equatable, Sendable {
     public let violations: [Violation]
     public let syntacticEvidenceGaps: [SyntaxEvidenceGap]
+    /// The grammar the trees were parsed with, absent when the run had no parser.
+    ///
+    /// Carried on the result rather than the report because serialising it into the envelope
+    /// belongs to Report version and compatibility, which owns the schema bump. The run still
+    /// needs it here: an under-selected grammar is the one degradation the trees cannot reveal.
+    public let syntaxGrammar: SyntaxGrammar?
 
-    public init(violations: [Violation], syntacticEvidenceGaps: [SyntaxEvidenceGap] = []) {
+    public init(
+      violations: [Violation],
+      syntacticEvidenceGaps: [SyntaxEvidenceGap] = [],
+      syntaxGrammar: SyntaxGrammar? = nil
+    ) {
       self.violations = violations
       self.syntacticEvidenceGaps = syntacticEvidenceGaps
+      self.syntaxGrammar = syntaxGrammar
     }
   }
 
@@ -81,7 +92,12 @@ public struct RuleEngine {
       violations.append(contentsOf: findings)
     }
 
-    return Result(violations: violations, syntacticEvidenceGaps: resolved.syntax.gaps)
+    return Result(
+      violations: violations,
+      syntacticEvidenceGaps: resolved.syntax.gaps
+        + resolved.syntax.grammarGaps(for: resolved.fileDiffs),
+      syntaxGrammar: syntacticEvidenceProvider?.grammar
+    )
   }
 
   /// The rules configuration leaves switched on, paired with the settings they report at.

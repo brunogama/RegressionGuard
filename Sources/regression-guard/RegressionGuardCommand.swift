@@ -45,6 +45,7 @@ struct Check: AsyncParsableCommand {
     let result = try await runner.evaluate(base: base, head: head)
     let violations = result.violations
     Self.reportEvidenceGaps(result.syntacticEvidenceGaps)
+    Self.reportUnderSelectedGrammar(result.syntaxGrammar)
     let hasBlockingFinding = violations.contains { $0.severity >= threshold }
     let report = GuardReport(
       toolVersion: "0.1.0",
@@ -96,6 +97,22 @@ struct Check: AsyncParsableCommand {
       let detail = fileGaps.compactMap(\.detail).first.map { " - \($0)" } ?? ""
       Console.writeError("  \(path) (\(refs)): \(reasons)\(detail)")
     }
+  }
+
+  /// Says so when the run parsed with an older grammar than the rules were written against.
+  ///
+  /// The gaps above only catch syntax the parser noticed it could not represent. Syntax that
+  /// fits an existing open-ended production parses into a well-formed node and is simply read
+  /// wrong, with nothing in the tree to show for it. Comparing the series is all that is left,
+  /// and an unreported stale parser is a guard that quietly stopped looking.
+  private static func reportUnderSelectedGrammar(_ grammar: SyntaxGrammar?) {
+    guard let grammar, grammar.isUnderSelected else { return }
+    Console.writeError(
+      "regression-guard: parsed with swift-syntax \(grammar.alignmentSeries) "
+        + "(Swift \(grammar.swiftRelease)), older than the "
+        + "\(SyntaxGrammar.pinnedAlignmentSeries) this guard targets - "
+        + "syntax newer than that grammar may be read incorrectly and missed entirely."
+    )
   }
 
   private var formatter: ViolationFormatter {

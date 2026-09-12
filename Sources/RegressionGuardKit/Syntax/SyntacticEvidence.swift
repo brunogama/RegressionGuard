@@ -33,6 +33,15 @@ public enum SyntaxEvidenceGapReason: String, Codable, CaseIterable, Equatable, H
   /// gap: left unreconciled it would be indistinguishable from a file no rule ever asked about,
   /// which is the one reading that turns a would-be finding into a pass.
   case requestUnanswered
+  /// The source parsed, but the change reached syntax the parser could not represent.
+  ///
+  /// Two different causes land here and the tree cannot tell them apart: source the author
+  /// genuinely malformed, and source written in a Swift newer than this grammar. Both cost the
+  /// run the same thing - confidence about the changed region, which is exactly where a finding
+  /// would have been raised - so both are reported rather than guessed between. The tree
+  /// survives and stays usable elsewhere in the file. An under-selected parser fails this way
+  /// rather than by crashing, so the run has to say so.
+  case grammarUnrepresentable
 }
 
 /// One explicit, reportable hole in the syntactic evidence for a run.
@@ -107,6 +116,43 @@ public struct SyntacticFileEvidence: Codable, Equatable, Sendable {
       return SyntaxEvidenceGap(path: path, ref: ref, reason: reason, detail: detail)
     }
   }
+
+  /// Where the change reached syntax the parser could not represent, one gap per side.
+  ///
+  /// Separate from `gaps` because it needs the diff: a parse error the change never touched
+  /// costs the run nothing, while one inside the changed region is the case where a rule would
+  /// have looked and seen nothing. A side that already has no tree is skipped, since it reports
+  /// its own gap through `gaps` and would otherwise be counted twice.
+  public func grammarGaps(in changedLineMap: ChangedLineMap) -> [SyntaxEvidenceGap] {
+    [(SyntaxRef.base, base), (SyntaxRef.head, head)].compactMap { ref, availability in
+      guard case .parsed(let tree) = availability else { return nil }
+      let changedLines = changedLineMap.changedLines(at: ref)
+      guard !changedLines.isEmpty else { return nil }
+      let nodes = tree.errorNodes(touching: changedLines)
+      guard nodes.isEmpty else {
+        return gap(ref: ref, describing: nodes.map(\.span.start).sorted())
+      }
+      // A tree that reports file-level parse errors but localises none of them still costs the
+      // run its confidence, and a projection that fills only the older file-level flag would
+      // otherwise produce no gap at all - a silent pass by omission. Claim the whole changed
+      // region rather than trusting the absence.
+      guard tree.hasParseErrors else { return nil }
+      return gap(ref: ref, describing: changedLines.sorted())
+    }
+  }
+
+  private func gap(ref: SyntaxRef, describing lines: [Int]) -> SyntaxEvidenceGap {
+    let label = lines.count == 1 ? "line" : "lines"
+    return SyntaxEvidenceGap(
+      path: path,
+      ref: ref,
+      reason: .grammarUnrepresentable,
+      detail:
+        "The parser could not represent the syntax the change touched at "
+        + "\(label) \(lines.map(String.init).joined(separator: ", ")). "
+        + "Findings for this region are inconclusive, not clean."
+    )
+  }
 }
 
 /// The syntactic evidence resolved for one run: parsed files, keyed by reported path.
@@ -140,6 +186,15 @@ public struct SyntacticEvidence: Codable, Equatable, Sendable {
   /// Every gap in the run, in a stable order, for the run to report.
   public var gaps: [SyntaxEvidenceGap] {
     files.flatMap(\.gaps)
+  }
+
+  /// Every changed region whose syntax the parser could not represent, across `fileDiffs`.
+  ///
+  /// Needs the diffs rather than the evidence alone, because a parse error only matters where
+  /// the change reached it. Reported so an under-selected grammar reads as inconclusive: without
+  /// this a rule looks at a region it cannot see, finds nothing, and that is a pass.
+  public func grammarGaps(for fileDiffs: [FileDiff]) -> [SyntaxEvidenceGap] {
+    fileDiffs.flatMap { evidence(for: $0)?.grammarGaps(in: $0.changedLineMap) ?? [] }
   }
 
   /// Fills in every request the provider left unanswered, as an explicit gap.
@@ -219,7 +274,16 @@ public struct SyntacticEvidenceRequest: Codable, Equatable, Hashable, Sendable {
 /// keeps the working-tree case - where head is the checkout rather than a ref - expressible
 /// without RegressionGuardKit having to model it.
 public protocol SyntacticEvidenceProvider: Sendable {
+  /// The swift-syntax grammar this provider parses with, so the run can record what judged it
+  /// and notice a series older than the one the rules were written against.
+  var grammar: SyntaxGrammar? { get }
+
   func syntacticEvidence(for requests: [SyntacticEvidenceRequest]) -> SyntacticEvidence
+}
+
+public extension SyntacticEvidenceProvider {
+  /// A provider that does not parse Swift has no grammar to name.
+  var grammar: SyntaxGrammar? { nil }
 }
 
 /// The evidence a run gets when no parser was injected: every requested file is an explicit gap.

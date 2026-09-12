@@ -104,6 +104,15 @@ public struct SyntaxNode: Codable, Equatable, Sendable {
   /// Read comments through a sweep (`allComments`, `hasComment(containing:)`) rather than off one
   /// node, for the same reason.
   public let comments: [String]
+  /// `true` when the parser could not represent the syntax written here, which it records as
+  /// unexpected nodes or missing tokens.
+  ///
+  /// Node-local by contract, and deliberately not swift-syntax's own recursive `hasError`: the
+  /// projection must set this only on the node that directly holds the unrepresentable syntax.
+  /// Propagating it upwards would mark the whole file, and a grammar gap that cannot be scoped
+  /// to a region is a grammar gap that has to fail the entire run. Ask `hasErrorInSubtree` for
+  /// the recursive question.
+  public let hasError: Bool
   public let children: [Self]
 
   public init(
@@ -112,6 +121,7 @@ public struct SyntaxNode: Codable, Equatable, Sendable {
     name: String? = nil,
     attributes: [String] = [],
     comments: [String] = [],
+    hasError: Bool = false,
     children: [Self] = []
   ) {
     self.kind = kind
@@ -119,7 +129,13 @@ public struct SyntaxNode: Codable, Equatable, Sendable {
     self.name = name
     self.attributes = attributes
     self.comments = comments
+    self.hasError = hasError
     self.children = children
+  }
+
+  /// `true` when this node or anything below it holds syntax the parser could not represent.
+  public var hasErrorInSubtree: Bool {
+    selfAndDescendants.contains { $0.hasError }
   }
 
   /// Every node below this one, depth first in source order.
@@ -219,6 +235,16 @@ public struct SyntaxTree: Codable, Equatable, Sendable {
 
   public func firstNode(ofKind kind: SyntaxNodeKind) -> SyntaxNode? {
     root.firstNode(ofKind: kind)
+  }
+
+  /// The nodes holding syntax the parser could not represent that sit on any of `lines`.
+  ///
+  /// The scoping is the point: an under-selected grammar leaves the rest of the file perfectly
+  /// readable, so only a change that reaches unrepresentable syntax is inconclusive.
+  public func errorNodes(touching lines: some Sequence<Int>) -> [SyntaxNode] {
+    let lines = Set(lines)
+    guard !lines.isEmpty else { return [] }
+    return root.selfAndDescendants.filter { $0.hasError && $0.span.intersects(lines: lines) }
   }
 
   /// Every comment in the file, for approval-marker sweeps.
