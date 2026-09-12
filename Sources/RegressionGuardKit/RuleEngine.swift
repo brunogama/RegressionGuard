@@ -37,6 +37,7 @@ public struct RuleEngine {
   /// Evaluates every enabled rule against one canonical evidence bundle.
   public func run(evidence: EvidenceBundle, context: RuleContext) -> [Violation] {
     let visibleEvidence = excludingIgnoredPaths(from: evidence, context: context)
+    guard !context.isApproved else { return [] }
     var violations: [Violation] = []
 
     for rule in rules {
