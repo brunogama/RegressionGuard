@@ -51,7 +51,7 @@ All three manifests declare the package identity as `RegressionGuard`. SwiftPM r
 checkouts:
 
 - `Package.local.swift` builds with no network access, resolving every dependency from a sibling
-  checkout: `../swift-argument-parser`, and `../swift-syntax` once the parsing target lands.
+  checkout: `../swift-argument-parser` and `../swift-syntax`.
 - `Package.binary.swift` exposes local XCFrameworks and the CLI artifact bundle under `Artifacts/`.
 
 All manifests use Swift 6 language mode. CI compiles and tests with complete concurrency checking
@@ -62,16 +62,17 @@ Vendoring the sibling checkouts needs the network, so it happens before you go o
 ```bash
 git clone --depth 1 --branch 1.8.2 \
   https://github.com/apple/swift-argument-parser.git ../swift-argument-parser
+git clone --depth 1 --branch 603.0.2 \
+  https://github.com/swiftlang/swift-syntax.git ../swift-syntax
 ```
 
-Once the parsing target lands, `../swift-syntax` joins it, and its tag must be on the alignment
-series `SyntaxGrammar.pinnedAlignmentSeries` pins - that constant is where the series is decided -
-because an older parser cannot represent newer syntax and would quietly stop seeing the constructs
-rules look for.
+A path dependency gets no `Package.resolved` entry, so that checkout's tag is the whole pin - there
+is no resolver to hold it to the range `Package.swift` declares. It must be on the alignment series
+`SyntaxGrammar.pinnedAlignmentSeries` names, which is where the series is decided, because an older
+parser cannot represent newer syntax and would quietly stop seeing the constructs rules look for.
 
 `scripts/prepare-offline-validation.py` builds a disposable copy on that manifest, and refuses to
-run when a checkout the manifest names is missing or when a swift-syntax one is off the pinned
-series.
+run when a checkout the manifest names is missing or when the swift-syntax one is off that series.
 
 ## GoldenMaster: recording behavior instead of asserting it
 

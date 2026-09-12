@@ -19,15 +19,25 @@ Do the work of vendoring it and record what the offline path now requires: where
 checkout at `../swift-syntax`, on a tag in the alignment series
 `SyntaxGrammar.pinnedAlignmentSeries` pins, reached through the same kind of path dependency
 `Package.local.swift` already uses for swift-argument-parser. Nothing is degraded and no consumer
-has to be told anything, so the parity decision holds unchanged. Built and measured end to end, not
-argued: a prepared copy on that manifest builds and passes all 235 tests with no network access.
+has to be told anything, so the parity decision holds unchanged. Demonstrated rather than argued: a
+prepared copy builds and passes all 248 tests with no network access, and the grammar test in that
+run asserts the offline build can name its own series.
 
-One thing this ticket decides but does not itself declare: the `.package(path: "../swift-syntax")`
-line. `Package.swift` has no swift-syntax dependency yet, the three manifests have to stay at
-parity, and `AGENTS.md` puts a target's declaration in the ticket that creates its sources. So the
-route below is settled and its harness is built and tested, while the manifest line lands with the
-parsing target. Everything written in the present tense about swift-syntax specifically is
-conditional on that line; everything about swift-argument-parser and about the harness is live now.
+Both manifests declare swift-syntax here rather than deferring it. That needed a target to consume
+it, because a declared-but-unused dependency would make every consumer resolve swift-syntax for
+nothing, so `RegressionGuardSyntax` lands with this ticket: the target ticket 14 placed behind the
+CLI, holding swift-syntax so RegressionGuardKit stays dependency-free. It carries the source-text
+half of the work - `SwiftSyntaxProjection`, which turns Swift source into the `SyntaxTree`
+projection RegressionGuardKit owns, and `CompiledSyntaxGrammar`, which reports the series the build
+resolved. The provider's other half, fetching base-ref source over git, is not here; that is
+integration work with its own shape, and `SyntacticEvidenceProvider` stays unimplemented rather
+than stubbed, because a provider that answered every request with `.unavailable` would be exactly
+the `implementation_stubbed` shape this package exists to flag.
+
+`Package.binary.swift` correctly gains nothing. It declares no package dependencies at all - every
+target in it is a binary target or the plugin - and ticket 24 already accepted that a
+binary-distributed run has no parser. Parity means all three manifests keep working, not that all
+three carry swift-syntax.
 
 The tempting alternative was measured and rejected. `prepare-offline-validation.py` used to strip
 the swift-syntax package out of the manifest and compile against the toolchain's own host modules
@@ -53,12 +63,17 @@ from an online build's text; and being private, they carry no compatibility prom
 - **Which revision**: the current series tag, `603.0.2` (`79e4b74a`). That is the revision the
   parse-performance harness resolved under the pinned range, and the same commit carries
   `swift-6.3.3-RELEASE`, so the offline grammar is the same one an online resolve produces today.
-  The root `Package.resolved` does not say so, because it has no swift-syntax entry at all yet.
-- **How the pin stays aligned**: through `SyntaxGrammar.pinnedAlignmentSeries` rather than through
-  a second literal. The harness reads that constant and accepts any `603.x.y` tag, because a patch
-  release inside a series cannot add grammar; the manifest range the pin ticket specified,
-  `"603.0.0"..<"604.0.0"`, lands with the parsing target and is derived from the same constant.
-  Bumping the series stays the one edit that ticket described.
+  A fresh online resolve against the new manifest range picks exactly that revision, so the vendored
+  checkout and the resolver agree. That agreement is not recorded anywhere committed: this
+  repository does not track `Package.resolved`, so no manifest-independent pin file exists for
+  either route, online or offline.
+- **How the pin stays aligned**: `Package.swift` declares the range the pin ticket specified,
+  `"603.0.0"..<"604.0.0"`, and the harness reads `SyntaxGrammar.pinnedAlignmentSeries` and accepts
+  any `603.x.y` tag, because a patch release inside a series cannot add grammar. The series is
+  decided in that constant and written into the manifest beside it; bumping it stays the one edit
+  ticket 24 described, now three lines instead of one. A fourth check is free and automatic:
+  `CompiledSyntaxGrammar` reports the series the build actually resolved, and its test asserts that
+  against the constant, so a manifest range that drifts from the pin fails the suite.
 - **A path dependency records no pin.** `Package.resolved` never gets an entry for a path
   dependency - verified against a full offline build, which produced no `Package.resolved` at all -
   so the offline route has no resolver-enforced version and the checkout's own tag is the whole pin.
@@ -71,10 +86,10 @@ It no longer substitutes toolchain host modules for anything. It reads the path 
 repository and installs `Package.local.swift` as the copy's `Package.swift` with each `../name`
 rewritten to the vendored absolute path - necessary because the destination is an arbitrary
 directory, and because inside a git worktree `../` is not the developer's checkout root either.
-Alongside that it reads `pinnedAlignmentSeries` and rejects a swift-syntax checkout off that series.
-That last check is the point of the ticket and it is deliberately inert today: it arms itself from
-whatever `Package.local.swift` names, so it starts firing the moment the swift-syntax line lands
-rather than needing to be remembered then.
+Alongside that it reads `pinnedAlignmentSeries` and rejects a swift-syntax checkout off that series,
+which is the check this ticket exists to install and which is live now that the manifest names
+swift-syntax. It reads whatever path dependencies the manifest declares, so a future one is covered
+without editing the harness.
 
 Two bugs died with the rewrite. The toolchain gate demanded `Swift version 6.2` and would have
 rejected every current machine; it is gone rather than retargeted, because vendored sources mean the
@@ -86,16 +101,16 @@ runs all 235 tests under `--disable-automatic-resolution`.
 
 ### What it costs
 
-Measured on an Apple-silicon laptop under Swift 6.3.3, clean builds of `swift build --build-tests`,
-with a throwaway parsing target depending on `SwiftParser`, `SwiftSyntax` and
-`SwiftParserDiagnostics` standing in for the real one.
+Measured on an Apple-silicon laptop under Swift 6.3.3, clean `swift build --build-tests` of a
+prepared offline copy, before and after this change - so "after" is the real `RegressionGuardSyntax`
+target and its test target, not an estimate.
 
-| | today | with swift-syntax vendored | delta |
+| | before | after | delta |
 |---|---|---|---|
 | vendored checkouts | 3.3 MiB | 16.3 MiB | +13.0 MiB |
-| `.build` | 238 MiB | 574 MiB | +336 MiB |
-| clean build, wall | 11.3 s | 23.6 s | +12.3 s (2.1x) |
-| clean build, CPU | 50.4 s | 138.6 s | +88.2 s (2.8x) |
+| `.build` | 238 MiB | 623 MiB | +385 MiB |
+| clean build, wall | 11.3 s | 34.4 s | +23.1 s (3.0x) |
+| clean build, CPU | 50.4 s | 188.7 s | +138.3 s (3.7x) |
 
 The checkout is the cheap half and the question text's "much larger checkout" overstates it: a
 shallow clone at the tag is 13 MiB against swift-argument-parser's 3.3 MiB, 4x rather than an order
@@ -105,8 +120,7 @@ the dependency posture ticket measured for a minimal SwiftParser executable, and
 triples - swift-syntax parallelises well, so a machine with fewer cores pays closer to the CPU
 figure than the wall one. None of this is paid on an incremental build.
 
-The costs above are what the parsing target will add, not what it has added: they were measured by
-standing a throwaway target up against a real vendored checkout, then taking it down. What the
-parsing-target ticket inherits from here is one line in `Package.local.swift` -
-`.package(path: "../swift-syntax")` beside the existing path dependency - and nothing else, because
-the harness reads whatever path dependencies the manifest names.
+These are floors, not ceilings. The rule migrations and the AST-only families will add source to
+`RegressionGuardSyntax`, and the provider's git half is still to come, so the wall figure will grow
+from 34 s rather than settle there. The shape holds though: it is swift-syntax that costs, and it
+costs once per clean build.

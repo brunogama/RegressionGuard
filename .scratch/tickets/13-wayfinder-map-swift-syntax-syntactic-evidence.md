@@ -104,16 +104,20 @@ Find the way to swift-syntax-backed detection in RegressionGuard: syntactic evid
 - [Offline vendoring of swift-syntax](23-offline-vendoring-of-swift-syntax.md): offline builds carry
   syntactic evidence at full parity, so no consumer has to be told anything - the route is a
   vendored source checkout at `../swift-syntax` on a tag in the pinned series, reached through the
-  path dependency `Package.local.swift` already uses, and a prepared copy builds and passes all 235
+  path dependency `Package.local.swift` already uses, and a prepared copy builds and passes all 248
   tests with no network. The toolchain's own host modules parse correctly but are rejected: they
   ship no `SwiftSyntax<series>` marker module, so a target compiled against them cannot report its
-  grammar and a working run becomes indistinguishable from a parserless one. A path dependency gets
-  no `Package.resolved` entry, so the checkout's tag is the entire pin, and
-  `prepare-offline-validation.py` now verifies it against `SyntaxGrammar.pinnedAlignmentSeries`
-  instead of substituting host modules; that check is inert until the manifest names swift-syntax,
-  which lands with the parsing target. Cost is +13 MiB checked out, +336 MiB of build output and
-  roughly double the clean build, none of it paid incrementally - the "much larger checkout" the
-  ticket assumed is 4x, not an order of magnitude.
+  grammar and a working run becomes indistinguishable from a parserless one. Both source manifests
+  declare swift-syntax now rather than deferring it, which required a target to consume it, so
+  `RegressionGuardSyntax` lands here with the source-text half - `SwiftSyntaxProjection` and
+  `CompiledSyntaxGrammar`, whose test asserts the resolved series against the pin - while the
+  provider's git half stays for integration and `SyntacticEvidenceProvider` stays unimplemented
+  rather than stubbed. `Package.binary.swift` gains nothing and should not. A path dependency gets
+  no `Package.resolved` entry, so the vendored checkout's tag is its entire pin, and
+  `prepare-offline-validation.py` verifies it against `SyntaxGrammar.pinnedAlignmentSeries` instead
+  of substituting host modules. Cost is +13 MiB checked out, +385 MiB of build output and 3x the
+  clean build, none of it paid incrementally - the "much larger checkout" the ticket assumed is 4x,
+  not an order of magnitude.
 
 ## Not yet specified
 

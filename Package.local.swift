@@ -20,7 +20,12 @@ let package = Package(
     .plugin(name: "RegressionGuardPlugin", targets: ["RegressionGuardPlugin"]),
   ],
   dependencies: [
-    .package(path: "../swift-argument-parser")
+    .package(path: "../swift-argument-parser"),
+    // A path dependency gets no `Package.resolved` entry, so this checkout's own tag is the entire
+    // pin - there is no resolver to enforce the range `Package.swift` declares. It must sit on the
+    // series `SyntaxGrammar.pinnedAlignmentSeries` names, and
+    // `scripts/prepare-offline-validation.py` refuses to build a copy when it does not.
+    .package(path: "../swift-syntax"),
   ],
   targets: [
     .target(
@@ -31,10 +36,19 @@ let package = Package(
       name: "RegressionGuardKit",
       dependencies: []
     ),
+    .target(
+      name: "RegressionGuardSyntax",
+      dependencies: [
+        "RegressionGuardKit",
+        .product(name: "SwiftParser", package: "swift-syntax"),
+        .product(name: "SwiftSyntax", package: "swift-syntax"),
+      ]
+    ),
     .executableTarget(
       name: "regression-guard",
       dependencies: [
         "RegressionGuardKit",
+        "RegressionGuardSyntax",
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
       ]
     ),
@@ -71,6 +85,13 @@ let package = Package(
     .testTarget(
       name: "RegressionGuardKitTests",
       dependencies: ["RegressionGuardKit"]
+    ),
+    .testTarget(
+      name: "RegressionGuardSyntaxTests",
+      dependencies: [
+        "RegressionGuardKit",
+        "RegressionGuardSyntax",
+      ]
     ),
     .testTarget(
       name: "RegressionGuardObserverTests",
