@@ -72,35 +72,4 @@ jobs:
 
       - name: Enforce RegressionGuardKit line coverage
         shell: bash
-        run: |
-          set -euo pipefail
-          profdata=$(
-            find .build -path '*/codecov/default.profdata' -print -quit
-          )
-          bundle=$(
-            find .build \
-              -name RegressionGuardKitTests.xctest \
-              -type d -print -quit
-          )
-          binary="$bundle/Contents/MacOS/RegressionGuardKitTests"
-          test -n "$profdata"
-          test -f "$binary"
-          xcrun llvm-cov export \
-            "$binary" \
-            -instr-profile "$profdata" \
-            -format lcov \
-            > regression-guard-coverage.lcov
-          read -r percentage hit total < <(
-            awk -F: '
-              /^SF:.*Sources\/RegressionGuardKit\// { included = 1; next }
-              /^end_of_record$/ { included = 0 }
-              included && /^LF:/ { total += $2 }
-              included && /^LH:/ { hit += $2 }
-              END {
-                if (total == 0) exit 1
-                printf "%.2f %d %d\n", 100 * hit / total, hit, total
-              }' regression-guard-coverage.lcov
-          )
-          printf 'RegressionGuardKit line coverage: %s%% (%s/%s)\n' \
-            "$percentage" "$hit" "$total" | tee -a "$GITHUB_STEP_SUMMARY"
-          awk -v coverage="$percentage" 'BEGIN { exit coverage < 90 }'
+        run: ./scripts/coverage-gate.sh

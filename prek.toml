@@ -29,12 +29,15 @@ always_run = true
 repo = "https://github.com/pre-commit/pre-commit-hooks"
 rev = "v6.0.0"
 
+# Recorded golden masters are byte-exact baselines; whitespace fixers must not
+# rewrite them or every test run leaves the working tree dirty.
 [[repos.hooks]]
 id = "trailing-whitespace"
-exclude = "\\.md$"
+exclude = "\\.md$|__GoldenMasters__/"
 
 [[repos.hooks]]
 id = "end-of-file-fixer"
+exclude = "__GoldenMasters__/"
 
 [[repos.hooks]]
 id = "mixed-line-ending"

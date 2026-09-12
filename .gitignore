@@ -168,3 +168,9 @@ claude-code-hook-generator/
 .agents/evidence/
 _bmad-output/implementation-artifacts/bmad-build-auto-result-*.md
 _bmad-output/implementation-artifacts/spec-implement-full-spec.md
+
+## Coverage gate artifacts
+
+coverage-summary.txt
+regression-guard-coverage.json
+regression-guard-coverage.lcov
