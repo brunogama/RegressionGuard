@@ -1,0 +1,234 @@
+# SwiftLint Configuration
+# Based on Google Swift Style Guide
+# https://google.github.io/swift/
+
+# Paths to include (Tests has its own .swiftlint.yml, linted separately)
+included:
+- Sources
+- Benchmarks
+
+# Paths to exclude
+excluded:
+- .build
+- .swiftpm
+- Package.swift
+- ${PWD}/.build
+
+# Enabled rules beyond default
+# NOTE: Formatting rules removed - handled exclusively by swift-format
+opt_in_rules:
+# Readability (logic-focused, non-formatting)
+- collection_alignment
+- contains_over_filter_count
+- contains_over_filter_is_empty
+- contains_over_first_not_nil
+- contains_over_range_nil_comparison
+- empty_collection_literal
+- empty_count
+- empty_string
+- empty_xctest_method
+- explicit_init
+- fallthrough
+- fatal_error_message
+# - file_header  # Disabled for now
+- file_name_no_space
+- first_where
+- flatmap_over_map_reduce
+- identical_operands
+- joined_default_parameter
+- last_where
+- literal_expression_end_indentation
+- lower_acl_than_parent
+- modifier_order
+- operator_usage_whitespace
+- optional_enum_case_matching
+- overridden_super_call
+- prefer_self_type_over_type_of_self
+- prefer_zero_over_explicit_init
+- private_action
+- private_outlet
+- prohibited_super_call
+- redundant_nil_coalescing
+- redundant_type_annotation
+- single_test_class
+- sorted_first_last
+- static_operator
+- toggle_bool
+- unavailable_function
+- unneeded_parentheses_in_closure_argument
+- unowned_variable_capture
+- untyped_error_in_catch
+- vertical_parameter_alignment_on_call
+- yoda_condition
+
+# Performance
+- array_init
+- discouraged_object_literal
+- enum_case_associated_values_count
+- reduce_into
+
+# Style (Google-specific, non-formatting)
+- closure_end_indentation
+- implicit_getter
+- object_literal
+- function_name_whitespace
+- prefer_self_in_static_references
+
+# Disabled rules (conflicts with Google style and swift-format)
+# swift-format handles all formatting/layout - SwiftLint only does logic/style validation
+disabled_rules:
+# Spacing and whitespace (handled by swift-format)
+- trailing_whitespace
+- vertical_whitespace
+- vertical_whitespace_closing_braces
+- vertical_whitespace_opening_braces
+- vertical_whitespace_between_cases
+
+# Brace and bracket positioning (handled by swift-format)
+- opening_brace
+- statement_position
+
+# Closure formatting (handled by swift-format)
+- closure_parameter_position
+- closure_spacing
+
+# Multi-line formatting (handled by swift-format)
+- multiline_arguments
+- multiline_function_chains
+- multiline_literal_brackets
+- multiline_parameters
+- multiline_parameters_brackets
+
+# Miscellaneous formatting (handled by swift-format)
+- trailing_comma
+- number_separator
+- attributes
+- implicit_return
+- void_return
+
+# Import ordering (handled by swift-format - disabled in both)
+- sorted_imports
+
+# Google style and project-specific
+- todo
+
+# Rule configurations
+analyzer_rules:
+- unused_declaration
+- unused_import
+
+# Custom configurations
+line_length:
+  warning: 100
+  error: 100
+  ignores_urls: true
+  ignores_function_declarations: false
+  ignores_comments: true
+  ignores_interpolated_strings: true
+
+# Identifier naming (Google style)
+identifier_name:
+  min_length:
+    warning: 2
+    error: 1
+  max_length:
+    warning: 40
+    error: 50
+  excluded:
+  - id
+  - ID
+  - URL
+  - url
+  - to
+  - by
+  - at
+  - in
+  - on
+  - or
+  - as
+  - is
+  - of
+  - up
+  - i
+  - j
+  - k
+  - x
+  - y
+  - z
+  - r
+  - g
+  - b
+  - a
+
+type_name:
+  min_length: 3
+  max_length:
+    warning: 40
+    error: 50
+  allowed_symbols: [ "_" ]
+  validates_start_with_lowercase:
+    warning: false
+  excluded:
+    # Deprecated typealiases retained for SemVer compatibility (renamed types below).
+    - VectorModelCollectionHybridSearchResponse
+    - VectorModelCollectionSparseDenseHybridResult
+    - VectorModelCollectionLateFusionSearchResult
+    - VectorModelCollectionCrossModalSearchResult
+    - VectorModelCollectionMultiFieldDistanceResult
+    - RawContentAuthenticationContextConfiguration
+
+function_parameter_count:
+  warning: 4
+  error: 6
+
+# File and type length limits (Google style)
+file_length:
+  warning: 200
+  error: 400
+  ignore_comment_only_lines: true
+
+type_body_length:
+  warning: 200
+  error: 300
+
+function_body_length:
+  warning: 40
+  error: 80
+
+# Cyclomatic complexity (Google recommendation)
+cyclomatic_complexity:
+  warning: 10
+  error: 15
+
+# Nesting (Google recommends shallow nesting)
+nesting:
+  type_level: 2
+  function_level: 3
+
+# Modifier order - using default configuration due to version compatibility
+
+# NOTE: Formatting rules (attributes, multiline_arguments, vertical_whitespace, number_separator)
+# removed - all formatting handled by swift-format to prevent conflicts
+
+# Empty count
+empty_count:
+  severity: error
+
+custom_rules:
+  prefer_struct:
+    name: "Prefer Struct"
+    regex: "^class\\s+\\w+[^\\{]*\\{"
+    message: "Consider using a struct instead of a class when possible"
+    severity: warning
+
+  no_print:
+    name: "No Print Statements"
+    regex: "\\bprint\\("
+    message: "Remove print statements from production code use Logger or os_log instead"
+    severity: error
+    excluded:
+    - "Tests/*"
+    - "Benchmarks/*"
+
+# Reporter type
+reporter: "xcode"
