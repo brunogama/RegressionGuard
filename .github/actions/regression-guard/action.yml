@@ -21,7 +21,7 @@ inputs:
     required: false
     default: "error"
   guard-version:
-    description: "Git ref of <your-org>/GoldenMasterSwift to build the tool from."
+    description: "Git ref of brunogama/RegressionGuard to build the tool from."
     required: false
     default: "main"
   working-directory:
@@ -35,7 +35,7 @@ runs:
     - name: Check out regression-guard
       uses: actions/checkout@v4
       with:
-        repository: <your-org>/GoldenMasterSwift # TODO: replace with the actual org/repo once pushed to GitHub
+        repository: brunogama/RegressionGuard
         ref: ${{ inputs.guard-version }}
         path: .regression-guard-tool
 

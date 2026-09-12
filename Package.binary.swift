@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-  name: "GoldenMasterSwiftBinary",
+  name: "RegressionGuard",
   platforms: [
     .macOS(.v14),
     .iOS(.v15),

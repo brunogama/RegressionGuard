@@ -1,6 +1,6 @@
-# GoldenMasterSwift
+# RegressionGuard
 
-Two things, meant to be added to any Swift project:
+`RegressionGuard` is a Swift package with two complementary capabilities:
 
 1. **`GoldenMaster`** — a golden-master (characterization) snapshot testing library. Record what
    your code actually does today; fail the build the moment it silently does something else.
@@ -29,7 +29,10 @@ fails the build when it sees that pattern, so it has to be caught in review inst
 Add the package as a dependency:
 
 ```swift
-.package(url: "https://github.com/<your-org>/GoldenMasterSwift", from: "0.1.0")
+.package(
+    url: "https://github.com/brunogama/RegressionGuard",
+    from: "0.1.0"
+)
 ```
 
 And to the targets that need it:
@@ -43,8 +46,9 @@ And to the targets that need it:
 
 ### Alternate manifests
 
-SwiftPM reads only `Package.swift`; the alternate manifests are drop-in variants for dedicated
-build or distribution checkouts:
+All three manifests declare the package identity as `RegressionGuard`. SwiftPM reads only
+`Package.swift`; the alternates are drop-in variants for dedicated build or distribution
+checkouts:
 
 - `Package.local.swift` uses the local dependency at `../swift-argument-parser`.
 - `Package.binary.swift` exposes local XCFrameworks and the CLI artifact bundle under `Artifacts/`.
@@ -129,7 +133,8 @@ swift package regression-guard --base origin/main
   with:
     fetch-depth: 0 # required so both commits are available to diff
 
-- uses: <your-org>/GoldenMasterSwift/.github/actions/regression-guard@main
+- uses: >-
+    brunogama/RegressionGuard/.github/actions/regression-guard@main
   with:
     fail-on: error
 ```

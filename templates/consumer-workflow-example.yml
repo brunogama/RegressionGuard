@@ -13,6 +13,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: <your-org>/GoldenMasterSwift/.github/actions/regression-guard@main
+      - uses: >-
+          brunogama/RegressionGuard/.github/actions/regression-guard@main
         with:
           fail-on: error
