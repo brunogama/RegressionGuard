@@ -1,19 +1,23 @@
 set shell := ["/bin/bash", "-euo", "pipefail", "-c"]
 
-# Flags CI builds with. Kept here so a local run fails for the same reasons.
+# Flags CI builds the root package with. The CLI package carries the same strictness in its own
+# manifest instead, because -Xswiftc would also reach its dependencies.
 strict := "-Xswiftc -warnings-as-errors -Xswiftc -strict-concurrency=complete"
+cli := "--package-path RegressionGuardCLI"
 
 # Show the available recipes.
 default:
     @just --list
 
-# Build the package and its tests.
+# Build both packages and their tests.
 build:
     swift build --build-tests {{strict}}
+    swift build {{cli}} --build-tests
 
-# Run the test suite. `pipefail` is set above, so a failure still fails the recipe.
+# Run both test suites. `pipefail` is set above, so a failure still fails the recipe.
 test:
     swift test --parallel {{strict}} | xcbeautify -q
+    swift test {{cli}} --parallel | xcbeautify -q
 
 # Run the tests with coverage and enforce the RegressionGuardKit floor.
 coverage:
@@ -21,7 +25,7 @@ coverage:
     ./scripts/coverage-gate.sh
 
 # Format Swift sources in place.
-format *files="Sources Tests Plugins":
+format *files="Sources Tests RegressionGuardCLI":
     swift-format format --in-place --recursive {{files}}
 
 # Run every prek hook over the whole tree, as the pull request job does.
@@ -33,32 +37,30 @@ check: lint build coverage
 
 # Run the guard against your own changes, as the self-check workflow does.
 guard base="main":
-    swift build -c release
-    .build/release/regression-guard check --base "{{base}}" --head HEAD --format text
+    swift build {{cli}} -c release
+    RegressionGuardCLI/.build/release/regression-guard check --base "{{base}}" --head HEAD --format text
 
 # Record an observation artifact from a guard report.
 observe base="main":
-    swift build -c release
-    .build/release/regression-guard check --base "{{base}}" --head HEAD \
+    swift build {{cli}} -c release
+    RegressionGuardCLI/.build/release/regression-guard check --base "{{base}}" --head HEAD \
       --format text --report-file regression-guard-report.json || true
-    .build/release/regression-guard-observer \
+    RegressionGuardCLI/.build/release/regression-guard-observer \
       --report-file regression-guard-report.json \
       --output-file regression-guard-observation.json
 
 # Run the guard through the SwiftPM command plugin.
 plugin:
-    swift package regression-guard
+    swift package {{cli}} regression-guard
 
 # Build the universal CLI artifact bundle and print the checksum `Package.swift` needs.
 artifactbundle version:
     python3 scripts/build-artifactbundle.py --version "{{version}}"
 
-# Build and test a disposable offline copy, as a machine with no network would.
-offline dir="/tmp/regression-guard-offline":
-    rm -rf "{{dir}}"
-    python3 scripts/prepare-offline-validation.py "{{dir}}"
-    swift build --package-path "{{dir}}" --build-tests
-    swift test --package-path "{{dir}}"
+# Build and test the CLI against its vendored dependencies, as a machine with no network would.
+offline:
+    REGRESSIONGUARD_OFFLINE=1 swift build {{cli}} --build-tests
+    REGRESSIONGUARD_OFFLINE=1 swift test {{cli}} --parallel | xcbeautify -q
 
 # Drop build products and generated coverage evidence.
 clean:

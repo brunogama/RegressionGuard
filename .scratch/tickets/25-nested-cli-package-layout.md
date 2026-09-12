@@ -1,6 +1,6 @@
 Title: Nested CLI package layout
 Labels: wayfinder:task
-Status: open
+Status: closed
 Assignee: none
 Parent: Swift-syntax syntactic evidence map
 Blocked by: none
@@ -137,3 +137,79 @@ nothing, the CLI package stays addressable by URL so the plugin survives and sta
   unusual shape and needs a comment saying why, or the next reader will try to "fix" it.
 - **This does not reduce what the guard itself costs to build** - the CLI still compiles
   swift-syntax. It moves who pays, not how much.
+
+## Resolution
+
+The split shipped. The root package is the published one and declares **no dependencies at all**;
+everything with a dependency lives in `RegressionGuardCLI/`, a nested package, named after
+swift-syntax's own `SwiftParserCLI` rather than the bare `CLI/` this ticket proposed, so the
+directory says which package it holds.
+
+| | root `Package.swift` | `RegressionGuardCLI/Package.swift` |
+|---|---|---|
+| products | `GoldenMaster`, `RegressionGuardKit`, `RegressionGuardObserver` | `regression-guard`, `regression-guard-observer`, `RegressionGuardPlugin` |
+| dependencies | none | `..`, swift-syntax, Commander |
+| tests | 234 | 14 |
+
+Measured against the same cold-cache consumer this ticket opened with - a test target using only
+`GoldenMaster`:
+
+| | before | after |
+|---|---|---|
+| objects fetched | 80,542 | 0 |
+| checkouts carried | 13.5 MiB | none |
+| `Package.resolved` | written | not written |
+| cache after resolve | 67 MiB | 52 KiB |
+
+`swift build` and `swift test` pass in both packages, `just offline` still builds and tests with no
+network, and the test count reconciles: 234 + 14 = 248, the number this ticket recorded before the
+move. `EnforcementWeakeningEndToEndTests` needed no code change - its `#filePath` walk lands on the
+CLI package root, which is where the binary it spawns now builds. `AdvisoryRuleAdoptionTests` moved
+back to the root package: it reads a CLI source file but needs `TestSupport`, so only its path
+string changed.
+
+Three things the migration steps did not anticipate:
+
+- **A path dependency takes its identity from the directory name.** `.package(path: "..")` made the
+  parent's identity `feat+swift-syntax` in a worktree, and would do the same in a fork or any clone
+  the user renamed. `.package(name: "RegressionGuard", path: "..")` fixes the identity in the
+  manifest.
+- **Strict flags had to move into the CLI manifest.** `-Xswiftc -warnings-as-errors` on the command
+  line reaches dependencies too, and SwiftPM only suppresses dependency warnings for packages it
+  fetched itself - so offline, where they resolve locally, upstream's own deprecations failed a
+  build this repository cannot fix. `.unsafeFlags` is safe there and only there, because no
+  consumer resolves a nested package.
+- **`Vendor/` is a git data structure, not text.** The whitespace hooks rewrote `packed-refs`,
+  stripping the trailing space git writes on its header line. `prek.toml` now excludes
+  `RegressionGuardCLI/Vendor/` from all three text hooks.
+
+### The plugin: option (2), as an interim state
+
+The plugin lives in `RegressionGuardCLI/` today, which means it is reachable only by cloning this
+repository. That is not the intended end state and should not be read as one. Option (1) - the root
+declaring `.binaryTarget(url:checksum:)` against the artifact bundle - is the destination, and
+`scripts/build-artifactbundle.py` already produces it: universal arm64 + x86_64, 8.0 MiB zipped,
+checksum printed. It cannot be declared yet because `url:` needs a published release to point at,
+and a checksum cannot be computed for an artifact that does not exist at a URL.
+
+So the order is forced rather than chosen: cut a release carrying the bundle, then move the plugin
+back to the root behind the binary target. Until then the documented `swift package regression-guard`
+verb is unavailable to consumers, and that is the cost of landing this ticket before a release
+exists.
+
+The eager-download measurement stands and decides the destination: a consumer using only an
+unrelated library target still downloaded a 72 MiB bundle in full. Option (1) therefore costs every
+consumer 8 MiB, not only the ones who run the plugin - still far better than 80,542 objects and
+13.5 MiB of checkouts, and the same shape SwiftLint ships.
+
+The separate-repository idea is not taken. It would cost nothing at all, but it buys that by making
+two repositories release in step, and the artifact bundle already gets the plugin to zero marginal
+resolution cost for consumers who never invoke it.
+
+### Superseded
+
+`Package.local.swift`, `Package.source.swift`, and `Package.binary.swift` are deleted, along with
+`scripts/prepare-offline-validation.py`. The offline switch is one environment variable,
+`REGRESSIONGUARD_OFFLINE`, read by the CLI manifest - a legitimate use precisely because no
+consumer resolves that manifest. This supersedes the parts of ticket 23's resolution that name
+those files.

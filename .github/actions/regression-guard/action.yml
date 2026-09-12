@@ -41,13 +41,13 @@ runs:
 
     - name: Build regression-guard
       shell: bash
-      run: swift build -c release --package-path .regression-guard-tool
+      run: swift build -c release --package-path .regression-guard-tool/RegressionGuardCLI
 
     - name: Run regression-guard
       shell: bash
       working-directory: ${{ inputs.working-directory }}
       run: >
-        $GITHUB_WORKSPACE/.regression-guard-tool/.build/release/regression-guard check
+        $GITHUB_WORKSPACE/.regression-guard-tool/RegressionGuardCLI/.build/release/regression-guard check
         --base "${{ inputs.base }}"
         --head "${{ inputs.head }}"
         --format github

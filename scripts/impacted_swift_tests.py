@@ -12,7 +12,7 @@ and finally the working tree when the repository has no usable base ref.
 
 The optional mapping file is JSON with these fields:
   {
-    "ignore_paths": ["Vendor/**"],
+    "ignore_paths": ["RegressionGuardCLI/Vendor/**"],
     "source_mappings": {
       "Sources/Shared/**": ["AppTests/SharedTests"]
     },

@@ -44,40 +44,40 @@ And to the targets that need it:
 )
 ```
 
-### Alternate manifests
+### Two packages, and why
 
-All three manifests declare the package identity as `RegressionGuard`. SwiftPM reads only
-`Package.swift`; the alternates are drop-in variants for dedicated build or distribution
-checkouts:
+The published package holds the libraries and **no dependencies at all**. The CLI, its parser, and
+everything they pull in live in `RegressionGuardCLI/`, a nested package.
 
-- `Package.local.swift` builds with no network access and no setup. Both of its dependencies are
-  committed into this repository as bare git repositories under `Vendor/`, so a fresh clone can
-  build and test with the network unplugged. See `Vendor/README.md`.
-- `Package.binary.swift` exposes local XCFrameworks and the CLI artifact bundle under `Artifacts/`.
+SwiftPM resolves a consumer's whole package graph regardless of which product that consumer uses, so
+a dependency-free *target* inside a package that has dependencies is not a dependency-free
+*consumer*. Before this split, a project wanting only `GoldenMaster` fetched 80,542 objects and
+carried 13.5 MiB of checkouts for a CLI it never built. It now resolves nothing: no
+`Package.resolved`, no checkouts.
 
-All manifests use Swift 6 language mode. CI compiles and tests with complete concurrency checking
-and treats every Swift compiler warning as an error.
-
-Each vendored dependency is referenced as local source control rather than as a path dependency, so
-the resolver reads the committed repository's tags and enforces the same version `Package.swift`
-declares. For swift-syntax that means a copy off the alignment series
-`SyntaxGrammar.pinnedAlignmentSeries` names fails to resolve rather than quietly building a grammar
-the rules were not written against.
+Nothing can depend on a nested package, so nothing consumes its dependencies - the same arrangement
+swift-syntax uses for its own `SwiftParserCLI`.
 
 ```bash
-python3 scripts/prepare-offline-validation.py /tmp/offline-check
-swift build --package-path /tmp/offline-check --build-tests
-swift test --package-path /tmp/offline-check
+swift build                                    # libraries
+swift build --package-path RegressionGuardCLI  # CLI, parser, and dependencies
 ```
 
-That builds a disposable copy on the offline manifest, already carrying CI's strict flags on its own
-targets. It refuses to run when a vendored repository is missing, or when the declared swift-syntax
-range has drifted from `SyntaxGrammar.pinnedAlignmentSeries` - the one mismatch the resolver cannot
-see.
+Both CLI dependencies are also committed under `RegressionGuardCLI/Vendor/` as bare repositories, so
+the CLI builds with no network at all:
 
-Build the copy plainly, as above. Adding `-Xswiftc -warnings-as-errors` on the command line would
-reach the vendored repositories too, whose own deprecation warnings would fail a build this
-repository cannot fix.
+```bash
+just offline
+```
+
+They are referenced there as local source control rather than as paths, which is what lets the
+resolver read their tags and enforce the same versions the online build declares. A vendored
+swift-syntax off the alignment series `SyntaxGrammar.pinnedAlignmentSeries` names fails to resolve
+rather than quietly building a grammar the rules were not written against.
+
+All targets use Swift 6 language mode. CI compiles and tests with complete concurrency checking and
+treats every Swift compiler warning as an error; the CLI package carries those flags in its own
+manifest, because passing them on the command line would also reach its dependencies.
 
 ## GoldenMaster: recording behavior instead of asserting it
 
@@ -285,16 +285,29 @@ and the finding stands at text precision. Fix the finding, or lower that rule's 
 ## Architecture
 
 ```
+Package.swift            the published package: libraries, no dependencies
 Sources/
   GoldenMaster/          snapshot recording/verification library
   RegressionGuardKit/    git diff parsing, path classification, rules, config, formatters
-  RegressionGuardCommandLine/ option binding and help rendering over Commander
-  regression-guard/      CLI (Commander)
-  RegressionGuardPlugin/ `swift package regression-guard` command plugin
+  RegressionGuardObserver/  reviewed-finding observation artifacts
 Tests/
   GoldenMasterTests/
   RegressionGuardKitTests/  unit tests per rule + an end-to-end scratch-git-repo test that
                             simulates an agent disabling a test and asserts it gets caught
+  RegressionGuardObserverTests/
+
+RegressionGuardCLI/      nested package; nothing depends on it, so nothing inherits its dependencies
+  Sources/
+    regression-guard/          the CI-facing CLI (Commander)
+    regression-guard-observer/ observation CLI
+    RegressionGuardSyntax/     swift-syntax parsing, projected into RegressionGuardKit's types
+    RegressionGuardCommandLine/ option binding and help rendering Commander does not provide
+  Plugins/
+    RegressionGuardPlugin/ `swift package regression-guard` command plugin
+  Tests/
+    RegressionGuardSyntaxTests/ projection and grammar tests
+    RegressionGuardCLITests/    drives the built binary against a scratch repository
+  Vendor/                  swift-syntax and Commander as bare repositories, for offline builds
 .github/
   actions/regression-guard/ composite action for consumer repos
   workflows/                this repo's own CI + self-check (dogfoods the tool on its own PRs)

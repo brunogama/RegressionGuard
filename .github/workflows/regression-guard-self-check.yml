@@ -33,6 +33,14 @@ jobs:
           -Xswiftc -warnings-as-errors
           -Xswiftc -strict-concurrency=complete
 
+      # The CLI is a nested package, so its dependencies stay out of consumers' graphs. It carries
+      # the same strict flags in its own manifest, because -Xswiftc would also reach swift-syntax
+      # and Commander, whose warnings this repository cannot fix.
+      - name: Build and test the CLI package
+        run: |
+          swift build --package-path RegressionGuardCLI --build-tests
+          swift test --package-path RegressionGuardCLI --parallel
+
       - name: Enforce RegressionGuardKit line coverage
         shell: bash
         run: ./scripts/coverage-gate.sh
@@ -63,7 +71,7 @@ jobs:
         run: sudo xcode-select -s /Applications/Xcode.app
 
       - name: Build regression-guard
-        run: swift build -c release
+        run: swift build --package-path RegressionGuardCLI -c release
 
       - name: Write machine-readable report
         id: guard
@@ -73,7 +81,7 @@ jobs:
           HEAD_REF: ${{ github.event.pull_request.head.sha }}
         run: |
           set +e
-          .build/release/regression-guard check \
+          RegressionGuardCLI/.build/release/regression-guard check \
             --base "$BASE_REF" \
             --head "$HEAD_REF" \
             --format text \
@@ -91,7 +99,7 @@ jobs:
         run: |
           set +e
           if test -f regression-guard-report.json; then
-            .build/release/regression-guard-observer \
+            RegressionGuardCLI/.build/release/regression-guard-observer \
               --report-file regression-guard-report.json \
               --output-file regression-guard-observation.json
             status=$?
@@ -112,14 +120,14 @@ jobs:
           HEAD_REF: ${{ github.event.pull_request.head.sha }}
         run: |
           set +e
-          .build/release/regression-guard check \
+          RegressionGuardCLI/.build/release/regression-guard check \
             --base "$BASE_REF" \
             --head "$HEAD_REF" \
             --format github > regression-guard-annotations.txt
           annotation_status=$?
           cat regression-guard-annotations.txt
 
-          .build/release/regression-guard check \
+          RegressionGuardCLI/.build/release/regression-guard check \
             --base "$BASE_REF" \
             --head "$HEAD_REF" \
             --format text > regression-guard-summary.txt

@@ -119,15 +119,34 @@ Find the way to swift-syntax-backed detection in RegressionGuard: syntactic evid
   clean build, none of it paid incrementally - the "much larger checkout" the ticket assumed is 4x,
   not an order of magnitude.
 
+- [Nested CLI package layout](25-nested-cli-package-layout.md): the dependency posture of
+  ticket 14 was right about targets and wrong about consumers - SwiftPM resolves a consumer's whole
+  package graph regardless of which product it uses, so a `GoldenMaster` test target was fetching
+  80,542 objects and carrying 13.5 MiB of checkouts for a CLI it never builds. The published package
+  now declares no dependencies at all, and the CLI, its parser, and its vendored repositories live
+  in `RegressionGuardCLI/`, a nested package nothing can depend on because SwiftPM resolves from a
+  repository root - the arrangement swift-syntax uses for `SwiftParserCLI`, verified by that same
+  consumer resolving swift-syntax but not its nested package's swift-argument-parser. The consumer
+  now resolves nothing: no `Package.resolved`, no checkouts, 52 KiB of cache against 67 MiB, with
+  248 tests reconciled across the two roots as 234 + 14. The three alternate manifests and
+  `prepare-offline-validation.py` are gone, replaced by one `REGRESSIONGUARD_OFFLINE` variable the
+  CLI manifest reads - legitimate only because no consumer resolves that manifest, and for the same
+  reason the strict flags moved into it, since on the command line they reach dependencies whose
+  warnings this repository cannot fix. The plugin is the unpaid part: it sits in the nested package,
+  so `swift package regression-guard` is unavailable to consumers until a release carries the
+  artifact bundle and the root can name it through `.binaryTarget(url:checksum:)`, measured at 8 MiB
+  paid by every consumer because binary artifacts download eagerly whether or not anything uses
+  them.
+
 ## Not yet specified
 
 - Promotion of advisory AST rule families to blocking, once per-rule false-positive rates exist. Depends on calibration data that cannot be gathered until the rules have shipped and been reviewed.
 - Whether syntactic evidence enables precise, evidence-bounded fix-its in the agent remediation prompt, beyond the deterministic hints already decided. A tree makes concrete rewrites expressible for the first time.
 - How syntactic evidence interacts with generated or vendored Swift that is in a guarded repository but not authored by it.
-- Whether the command plugin keeps working once the CLI moves to a nested package, and at what
-  consumer cost. Tracked in [Nested CLI package layout](25-nested-cli-package-layout.md), which
-  found that the dependency posture decision left every consumer fetching swift-syntax for a CLI
-  they never build - 80,542 objects for a project that only wants `GoldenMaster`.
+- When the command plugin becomes available to consumers again. The layout ticket settled the
+  destination - the root declaring `.binaryTarget(url:checksum:)` against the artifact bundle
+  `scripts/build-artifactbundle.py` already builds - but `url:` needs a published release to point
+  at, so the plugin sits in the nested package and reaches nobody until one is cut.
 - Whether a run should cap the source it retains at once. The parse performance budget measured a retained tree at about 50x its source and a 15.31 MiB diff peaking at 781.9 MiB, which fits a standard runner but not a small container. A cap means degrading part of a change to line-based detection, which is a policy question the budget ticket deliberately did not answer.
 
 ## Out of scope

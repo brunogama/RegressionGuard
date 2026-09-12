@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Build the `regression-guard` artifact bundle that consumers resolve instead of source.
+"""Build the `regression-guard` artifact bundle a release publishes.
 
-The CLI is the only part of this package with dependencies. Shipping it as a
-binary keeps them out of every consumer's dependency graph: a project that wants
-`GoldenMaster` for snapshot tests resolves nothing at all, rather than fetching
-swift-syntax and Commander for a CLI it never builds.
+The CLI is the only part of this repository with dependencies, and it lives in
+its own nested package so those dependencies stay out of every consumer's graph.
+Shipping the CLI prebuilt is what will let the published package offer the
+`swift package regression-guard` plugin without dragging swift-syntax back in.
 
-Produces a universal (arm64 + x86_64) bundle and prints the SwiftPM checksum to
-put in `.binaryTarget(name:url:checksum:)`.
+Produces a universal (arm64 + x86_64) bundle and prints the SwiftPM checksum for
+`.binaryTarget(name:url:checksum:)`.
 """
 from __future__ import annotations
 import argparse
@@ -20,41 +20,18 @@ EXECUTABLES = ["regression-guard", "regression-guard-observer"]
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--version", required=True, help="Release version, for example 0.1.0")
-parser.add_argument(
-    "--manifest",
-    default="Package.source.swift",
-    help="Manifest to build the CLI from; the shipping one declares it as a binary",
-)
 parser.add_argument("--output", type=pathlib.Path, default=pathlib.Path(".build/artifacts"))
 args = parser.parse_args()
 
 source = pathlib.Path(__file__).resolve().parents[1]
-manifest = source / args.manifest
-if not manifest.exists():
-    parser.error(f"{manifest} not found")
+cli = source / "RegressionGuardCLI"
+if not (cli / "Package.swift").exists():
+    parser.error(f"{cli} is not a package")
 
-# Build from the source manifest, in a scratch copy so the shipping `Package.swift` is untouched.
-scratch = source / ".build/artifactbundle-source"
-if scratch.exists():
-    shutil.rmtree(scratch)
-scratch.mkdir(parents=True)
-for entry in ["Sources", "Plugins", "Tests", "Vendor"]:
-    if (source / entry).exists():
-        shutil.copytree(source / entry, scratch / entry, symlinks=True)
-shutil.copy2(manifest, scratch / "Package.swift")
-
-subprocess.run(
-    ["swift", "build", "-c", "release", "--arch", "arm64", "--arch", "x86_64"],
-    cwd=scratch,
-    check=True,
-)
+build = ["swift", "build", "-c", "release", "--arch", "arm64", "--arch", "x86_64"]
+subprocess.run(build, cwd=cli, check=True)
 built = pathlib.Path(
-    subprocess.check_output(
-        ["swift", "build", "-c", "release", "--arch", "arm64", "--arch", "x86_64",
-         "--show-bin-path"],
-        cwd=scratch,
-        text=True,
-    ).strip()
+    subprocess.check_output(build + ["--show-bin-path"], cwd=cli, text=True).strip()
 )
 
 bundle = args.output / "regression-guard.artifactbundle"
@@ -84,10 +61,7 @@ for name in EXECUTABLES:
 archive = args.output / "regression-guard.artifactbundle.zip"
 if archive.exists():
     archive.unlink()
-subprocess.run(
-    ["ditto", "-c", "-k", "--keepParent", str(bundle), str(archive)],
-    check=True,
-)
+subprocess.run(["ditto", "-c", "-k", "--keepParent", str(bundle), str(archive)], check=True)
 checksum = subprocess.check_output(
     ["swift", "package", "compute-checksum", str(archive)], cwd=source, text=True
 ).strip()

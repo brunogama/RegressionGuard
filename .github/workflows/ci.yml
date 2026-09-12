@@ -70,6 +70,19 @@ jobs:
           -Xswiftc -warnings-as-errors
           -Xswiftc -strict-concurrency=complete
 
+      # The CLI is a nested package so its dependencies stay out of consumers' graphs. It carries
+      # the same strict flags in its own manifest, because -Xswiftc would also reach swift-syntax
+      # and Commander, whose warnings this repository cannot fix.
+      - name: Build and test the CLI package
+        run: |
+          swift build --package-path RegressionGuardCLI --build-tests
+          swift test --package-path RegressionGuardCLI --parallel
+
+      - name: Build the CLI against its vendored dependencies
+        env:
+          REGRESSIONGUARD_OFFLINE: "1"
+        run: swift build --package-path RegressionGuardCLI --build-tests
+
       - name: Enforce RegressionGuardKit line coverage
         shell: bash
         run: ./scripts/coverage-gate.sh
