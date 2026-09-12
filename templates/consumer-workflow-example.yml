@@ -1,0 +1,18 @@
+# Copy this into any Swift repo's .github/workflows/ to adopt regression-guard.
+# Requires fetch-depth: 0 so both the base and head commits are available to diff.
+name: Regression Guard
+
+on:
+  pull_request:
+
+jobs:
+  regression-guard:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: <your-org>/GoldenMasterSwift/.github/actions/regression-guard@main
+        with:
+          fail-on: error

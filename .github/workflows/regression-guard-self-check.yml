@@ -1,0 +1,182 @@
+name: Regression Guard (self-check)
+
+# This repo dogfoods its own tool: every PR is checked against itself.
+# It uses the same composite action contract as consuming projects.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  package-tests:
+    name: Build and test package
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Build package and tests
+        run: swift build --build-tests
+
+      - name: Test package
+        run: swift test --enable-code-coverage --parallel
+
+
+      - name: Enforce RegressionGuardKit line coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          profdata=$(find .build -name default.profdata -print -quit)
+          bundle=$(find .build -name RegressionGuardKitTests.xctest -type d -print -quit)
+          binary="$bundle/Contents/MacOS/RegressionGuardKitTests"
+          test -n "$profdata"
+          test -f "$binary"
+          read -r percentage hit total < <(
+            xcrun llvm-cov export "$binary" -instr-profile "$profdata" -format lcov | \
+              awk -F: '
+                /^SF:.*\/Sources\/RegressionGuardKit\// { included = 1; next }
+                /^end_of_record$/ { included = 0 }
+                included && /^LF:/ { total += $2 }
+                included && /^LH:/ { hit += $2 }
+                END {
+                  if (total == 0) exit 1
+                  printf "%.2f %d %d\n", 100 * hit / total, hit, total
+                }'
+          )
+          printf 'RegressionGuardKit line coverage: %s%% (%s/%s)\n' \
+            "$percentage" "$hit" "$total" | tee coverage-summary.txt \
+            >> "$GITHUB_STEP_SUMMARY"
+          printf '{"lineCoverage": %s, "coveredLines": %s, "totalLines": %s}\n' \
+            "$percentage" "$hit" "$total" > regression-guard-coverage.json
+          awk -v coverage="$percentage" 'BEGIN { exit coverage < 90 }'
+
+      - name: Upload coverage evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: regression-guard-coverage
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            coverage-summary.txt
+            regression-guard-coverage.json
+  regression-guard:
+    name: Check pull request diff
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Build regression-guard
+        run: swift build -c release
+
+      - name: Write machine-readable report
+        id: guard
+        shell: bash
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set +e
+          .build/release/regression-guard check \
+            --base "$BASE_REF" \
+            --head "$HEAD_REF" \
+            --format text \
+            --report-file regression-guard-report.json > regression-guard-summary.txt
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          cat regression-guard-report.json
+          exit 0
+
+      - name: Create finding observation
+        id: observer
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set +e
+          if test -f regression-guard-report.json; then
+            .build/release/regression-guard-observer \
+              --report-file regression-guard-report.json \
+              --output-file regression-guard-observation.json
+            status=$?
+          else
+            echo "guard report was not created" >&2
+            status=2
+          fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          printf 'observer_status=%s\n' "$status" \
+            >> regression-guard-observer-status.txt
+          exit 0
+
+      - name: Publish annotations and summary
+        if: ${{ always() }}
+        shell: bash
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set +e
+          .build/release/regression-guard check \
+            --base "$BASE_REF" \
+            --head "$HEAD_REF" \
+            --format github > regression-guard-annotations.txt
+          annotation_status=$?
+          cat regression-guard-annotations.txt
+
+          .build/release/regression-guard check \
+            --base "$BASE_REF" \
+            --head "$HEAD_REF" \
+            --format text > regression-guard-summary.txt
+          summary_status=$?
+          cat regression-guard-summary.txt >> "$GITHUB_STEP_SUMMARY"
+
+          printf 'annotation_status=%s\n' "$annotation_status" \
+            >> regression-guard-observer-status.txt
+          printf 'summary_status=%s\n' "$summary_status" \
+            >> regression-guard-observer-status.txt
+          exit 0
+
+      - name: Upload guard evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: regression-guard-evidence
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            regression-guard-report.json
+            regression-guard-annotations.txt
+            regression-guard-summary.txt
+            regression-guard-observation.json
+            regression-guard-observer-status.txt
+
+      - name: Enforce guard result
+        if: ${{ always() }}
+        env:
+          GUARD_STATUS: ${{ steps.guard.outputs.status }}
+          OBSERVER_STATUS: ${{ steps.observer.outputs.status }}
+        shell: bash
+        run: |
+          case "$GUARD_STATUS" in
+            0|1) ;;
+            *)
+              echo "regression-guard operational failure: ${GUARD_STATUS:-unknown}" >&2
+              exit 2
+              ;;
+          esac
+          if test "${OBSERVER_STATUS:-2}" -ne 0; then
+            echo "observer operational failure: ${OBSERVER_STATUS:-unknown}" >&2
+            exit 2
+          fi
+          exit "$GUARD_STATUS"

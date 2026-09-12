@@ -1,0 +1,54 @@
+name: "Regression Guard"
+description: >
+  Fails a PR when it disables/skips a test, weakens or deletes assertions, deletes production
+  logic instead of fixing it, silently drops golden-master baselines, or regresses coverage —
+  the shortcuts a stuck agent (or a stuck human) reaches for instead of a real fix.
+branding:
+  icon: shield
+  color: red
+
+inputs:
+  base:
+    description: "Ref to compare against."
+    required: false
+    default: "origin/${{ github.base_ref }}"
+  head:
+    description: "Ref to check."
+    required: false
+    default: "${{ github.event.pull_request.head.sha }}"
+  fail-on:
+    description: "Minimum severity that fails the job: info, warning, error."
+    required: false
+    default: "error"
+  guard-version:
+    description: "Git ref of <your-org>/GoldenMasterSwift to build the tool from."
+    required: false
+    default: "main"
+  working-directory:
+    description: "Directory of the repository being checked."
+    required: false
+    default: "."
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check out regression-guard
+      uses: actions/checkout@v4
+      with:
+        repository: <your-org>/GoldenMasterSwift # TODO: replace with the actual org/repo once pushed to GitHub
+        ref: ${{ inputs.guard-version }}
+        path: .regression-guard-tool
+
+    - name: Build regression-guard
+      shell: bash
+      run: swift build -c release --package-path .regression-guard-tool
+
+    - name: Run regression-guard
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: >
+        $GITHUB_WORKSPACE/.regression-guard-tool/.build/release/regression-guard check
+        --base "${{ inputs.base }}"
+        --head "${{ inputs.head }}"
+        --format github
+        --fail-on "${{ inputs.fail-on }}"

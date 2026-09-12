@@ -1,0 +1,41 @@
+# Copy this into the root of any project you add regression-guard to, then run
+# `swift package regression-guard` locally or add the GitHub Action to check it in CI.
+version: 1
+approvalMarker: "regression-guard:approve"
+
+rules:
+  disabled_or_skipped_test:
+    enabled: true
+    severity: error
+  weakened_assertion:
+    enabled: true
+    severity: error
+  behavior_deletion:
+    enabled: true
+    severity: warning
+  error_handling_collapse:
+    enabled: true
+    severity: warning
+  enforcement_weakening:
+    enabled: true
+    severity: error
+  review_escape:
+    enabled: true
+    severity: error
+  golden_master_drift:
+    enabled: true
+    severity: warning
+  coverage_regression:
+    enabled: true
+    severity: error
+
+ignore:
+  - "**/.build/**"
+  - "**/Generated/**"
+  - "**/*.generated.swift"
+
+testPaths:
+  - "Tests/**"
+  - "**/*Tests.swift"
+  - "**/*Test.swift"
+  - "**/*Spec.swift"
