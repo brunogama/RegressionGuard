@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PROTOTYPE - RegressionGuard evidence model</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #111318;
+      --panel: #1a1e27;
+      --panel-2: #222733;
+      --line: #384154;
+      --text: #edf1f7;
+      --muted: #9ca8bb;
+      --green: #5de2a2;
+      --amber: #ffc857;
+      --red: #ff6b79;
+      --blue: #75b9ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    main { max-width: 1440px; margin: 0 auto; padding: 32px; }
+    header { display: flex; justify-content: space-between; gap: 24px; align-items: end; margin-bottom: 24px; }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font: 700 30px/1.1 ui-sans-serif, system-ui, sans-serif; letter-spacing: -0.03em; }
+    h2 { font: 700 17px/1.2 ui-sans-serif, system-ui, sans-serif; }
+    h3 { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+    .eyebrow { color: var(--green); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 8px; }
+    .lede { max-width: 720px; color: var(--muted); margin-top: 10px; }
+    .stamp { color: var(--amber); border: 1px solid #806528; padding: 8px 10px; font-size: 11px; white-space: nowrap; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    button {
+      border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+      padding: 9px 12px; border-radius: 6px; cursor: pointer; font: inherit;
+    }
+    button:hover, button.active { border-color: var(--green); color: var(--green); }
+    .layout { display: grid; grid-template-columns: minmax(280px, .8fr) minmax(420px, 1.4fr); gap: 16px; }
+    .stack { display: grid; gap: 16px; align-content: start; }
+    .panel { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; overflow: hidden; }
+    .panel-head { display: flex; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .panel-body { padding: 16px; }
+    .scenario { display: grid; gap: 8px; }
+    .scenario button { text-align: left; }
+    .scenario button strong { display: block; font: 700 14px ui-sans-serif, system-ui, sans-serif; }
+    .scenario button span { display: block; color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .field { display: grid; grid-template-columns: 145px 1fr; gap: 12px; padding: 9px 0; border-bottom: 1px solid #2b3240; }
+    .field:last-child { border-bottom: 0; }
+    .key { color: var(--muted); }
+    code, pre { color: #d7e4f5; }
+    pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; font-size: 11px; color: var(--blue); }
+    .finding { border-left: 4px solid var(--red); background: #2a1d25; padding: 14px; }
+    .finding.warning { border-color: var(--amber); background: #2b261b; }
+    .finding.pass { border-color: var(--green); background: #192a25; }
+    .finding-title { display: flex; justify-content: space-between; gap: 12px; font-weight: 700; }
+    .badge { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+    .red { color: var(--red); } .amber { color: var(--amber); } .green { color: var(--green); }
+    .trace { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+    .trace > div { padding: 10px; border: 1px solid var(--line); background: #151922; }
+    .trace b { display: block; color: var(--green); margin-bottom: 6px; }
+    .note { color: var(--muted); font-size: 12px; }
+    @media (max-width: 850px) {
+      main { padding: 20px; }
+      header { align-items: start; flex-direction: column; }
+      .layout { grid-template-columns: 1fr; }
+      .trace { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <div class="eyebrow">RegressionGuard / evidence model</div>
+        <h1>What should a rule actually see?</h1>
+        <p class="lede">A throwaway logic prototype. Select a shortcut regression and inspect how raw diff data becomes an evidence bundle and then a finding.</p>
+      </div>
+      <div class="stamp">PROTOTYPE - DO NOT SHIP</div>
+    </header>
+
+    <div class="toolbar" id="toolbar"></div>
+    <div class="layout">
+      <div class="stack">
+        <section class="panel">
+          <div class="panel-head"><h2>Scenarios</h2><span class="note">free play</span></div>
+          <div class="panel-body scenario" id="scenarios"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Model question</h2></div>
+          <div class="panel-body">
+            <p class="note">Does the rule need more than the changed lines? Toggle evidence dimensions above. The right side updates after every action.</p>
+          </div>
+        </section>
+      </div>
+
+      <div class="stack">
+        <section class="panel">
+          <div class="panel-head"><h2>Evidence bundle</h2><span class="note" id="scenario-name"></span></div>
+          <div class="panel-body" id="evidence"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Derived finding</h2><span class="note">rule output</span></div>
+          <div class="panel-body" id="finding"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2>Transformation trace</h2><span class="note">raw -&gt; evidence -&gt; decision</span></div>
+          <div class="panel-body"><div class="trace" id="trace"></div></div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const dimensions = [
+      ['diff', 'Diff hunks'], ['content', 'Old/new content'], ['metadata', 'Commit metadata'],
+      ['coverage', 'Coverage report'], ['paths', 'Path classification']
+    ];
+    const scenarios = [
+      {
+        id: 'skip', name: 'Test suppression', summary: 'A test gains XCTSkip.', family: 'test_suppression', confidence: 'high', outcome: 'block',
+        path: 'Tests/MathTests.swift', flags: ['addedLines', 'testPath'],
+        diff: '+ throw XCTSkip("flaky")', old: 'XCTAssertEqual(add(2, 3), 5)', newer: 'throw XCTSkip("flaky")',
+        metadata: 'commit: Fix flaky test', coverage: 'unchanged: 93.4%', paths: 'test path: true; ignored: false',
+        message: 'Test was suppressed instead of fixed.', lesson: 'Changed lines plus test-path classification are sufficient.'
+      },
+      {
+        id: 'assertion', name: 'Assertion weakening', summary: 'An assertion becomes a tautology.', family: 'assertion_weakening', confidence: 'high', outcome: 'block',
+        path: 'Tests/ParserTests.swift', flags: ['addedLines', 'testPath'],
+        diff: '- #expect(result == expected)\n+ #expect(true)', old: '#expect(result == expected)', newer: '#expect(true)',
+        metadata: 'commit: update parser test', coverage: 'unchanged: 91.8%', paths: 'test path: true; ignored: false',
+        message: 'Assertion was replaced with a condition that cannot fail.', lesson: 'Coverage alone cannot represent assertion strength.'
+      },
+      {
+        id: 'delete', name: 'Behavior deletion', summary: 'Validation branch disappears.', family: 'behavior_deletion', confidence: 'medium', outcome: 'warn',
+        path: 'Sources/Parser.swift', flags: ['addedLines', 'oldContent'],
+        diff: '- guard token.isValid else { throw ParseError.invalid }', old: 'guard token.isValid else { throw ParseError.invalid }', newer: 'return token.value',
+        metadata: 'commit: simplify parser', coverage: 'drop: 0.2 points', paths: 'production path: true; ignored: false',
+        message: 'A validation branch was removed with no clear replacement.', lesson: 'Old content and nearby context reduce false positives.'
+      },
+      {
+        id: 'coverage', name: 'Coverage regression', summary: 'Overall coverage falls below policy.', family: 'coverage_regression', confidence: 'high', outcome: 'block',
+        path: '<repository>', flags: ['coverage', 'metadata'],
+        diff: 'coverage report: 91.2% -> 89.7%', old: 'n/a', newer: 'n/a',
+        metadata: 'base: main; head: pull request', coverage: 'line coverage: 89.7%; floor: 90%', paths: 'repository aggregate',
+        message: 'Package coverage fell below the 90% quality floor.', lesson: 'Coverage is repository evidence, not a file-hunk property.'
+      },
+      {
+        id: 'escape', name: 'Review escape', summary: 'Changed code moves under an ignored path.', family: 'review_escape', confidence: 'high', outcome: 'block',
+        path: 'Sources/Generated/Parser.swift', flags: ['diff', 'paths', 'metadata'],
+        diff: 'rename: Sources/Parser.swift -> Sources/Generated/Parser.swift', old: 'production parser', newer: 'production parser',
+        metadata: 'commit: reorganize generated sources', coverage: 'not available', paths: 'ignored: true; generated-looking: true',
+        message: 'Meaningful code was moved into a path excluded from review checks.', lesson: 'Path classification belongs in the shared evidence bundle.'
+      }
+    ];
+    const state = { scenario: scenarios[0], enabled: new Set(dimensions.map(dimension => dimension[0])) };
+
+    function element(tag, className, text) {
+      const value = document.createElement(tag);
+      if (className) value.className = className;
+      if (text !== undefined) value.textContent = text;
+      return value;
+    }
+
+    function replaceContent(id, nodes) {
+      document.querySelector(`#${id}`).replaceChildren(...nodes.filter(Boolean));
+    }
+
+    function renderToolbar() {
+      const nodes = dimensions.map(([id, label]) => {
+        const button = element('button', state.enabled.has(id) ? 'active' : '');
+        button.dataset.dimension = id;
+        button.textContent = `${state.enabled.has(id) ? 'ON ' : 'OFF '}${label}`;
+        button.onclick = () => {
+          state.enabled.has(id) ? state.enabled.delete(id) : state.enabled.add(id);
+          render();
+        };
+        return button;
+      });
+      replaceContent('toolbar', nodes);
+    }
+
+    function renderScenarios() {
+      const nodes = scenarios.map(item => {
+        const button = element('button', item.id === state.scenario.id ? 'active' : '');
+        button.dataset.scenario = item.id;
+        button.append(element('strong', undefined, item.name), element('span', undefined, item.summary));
+        button.onclick = () => {
+          state.scenario = item;
+          render();
+        };
+        return button;
+      });
+      replaceContent('scenarios', nodes);
+    }
+
+    function evidenceField(key, label, value) {
+      if (!state.enabled.has(key)) return null;
+      const field = element('div', 'field');
+      field.append(element('div', 'key', label), element('pre', undefined, value));
+      return field;
+    }
+
+    function renderEvidence() {
+      const s = state.scenario;
+      document.querySelector('#scenario-name').textContent = s.family;
+      const fields = [
+        evidenceField('diff', 'file diff', `${s.path}\n${s.diff}`),
+        evidenceField('content', 'old content', s.old),
+        evidenceField('content', 'new content', s.newer),
+        evidenceField('metadata', 'metadata', s.metadata),
+        evidenceField('coverage', 'measurement', s.coverage),
+        evidenceField('paths', 'classification', s.paths)
+      ];
+      const signals = element('div', 'field');
+      signals.append(element('div', 'key', 'active signals'));
+      const chips = element('div', 'chips');
+      s.flags.forEach(flag => chips.append(element('span', 'chip', flag)));
+      signals.append(chips);
+      fields.push(signals);
+      replaceContent('evidence', fields);
+    }
+
+    function findingTone(outcome) {
+      if (outcome === 'block') return 'red';
+      if (outcome === 'warn') return 'amber';
+      return 'green';
+    }
+
+    function findingTitle(degraded, outcome) {
+      if (degraded) return 'Evidence incomplete';
+      if (outcome === 'block') return 'Blocking finding';
+      return 'Advisory finding';
+    }
+
+    function renderFinding() {
+      const s = state.scenario;
+      const missing = s.flags.filter(flag => {
+        if (flag === 'coverage') return !state.enabled.has('coverage');
+        if (flag === 'paths') return !state.enabled.has('paths');
+        if (flag === 'metadata') return !state.enabled.has('metadata');
+        if (flag === 'oldContent') return !state.enabled.has('content');
+        return !state.enabled.has('diff');
+      });
+      const degraded = missing.length > 0;
+      const outcome = degraded ? 'warn' : s.outcome;
+      const tone = findingTone(outcome);
+      const title = findingTitle(degraded, outcome);
+      const text = degraded ? `Missing signal(s): ${missing.join(', ')}. The rule may be unable to distinguish a shortcut from a legitimate change.` : s.message;
+      const card = element('div', `finding ${outcome === 'warn' ? 'warning' : ''} ${outcome === 'pass' ? 'pass' : ''}`);
+      const heading = element('div', 'finding-title');
+      heading.append(element('span', undefined, title), element('span', `badge ${tone}`, outcome));
+      const detail = element('p', undefined, text);
+      detail.style.marginTop = '10px';
+      const source = element('p', 'note', `confidence: ${s.confidence}; source: ${s.path}`);
+      source.style.marginTop = '10px';
+      card.append(heading, detail, source);
+      replaceContent('finding', [card]);
+    }
+
+    function renderTrace() {
+      const s = state.scenario;
+      const values = [
+        ['1 / raw', s.diff],
+        ['2 / bundle', [...state.enabled].join(', ') || 'none'],
+        ['3 / result', `${s.family} - ${s.outcome}`]
+      ];
+      const nodes = values.map(([label, value]) => {
+        const item = element('div');
+        item.append(element('b', undefined, label), element('span', undefined, value));
+        return item;
+      });
+      replaceContent('trace', nodes);
+    }
+
+    function render() {
+      renderToolbar();
+      renderScenarios();
+      renderEvidence();
+      renderFinding();
+      renderTrace();
+    }
+
+    render();
+  </script>
+</body>
+</html>
