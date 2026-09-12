@@ -50,11 +50,28 @@ All three manifests declare the package identity as `RegressionGuard`. SwiftPM r
 `Package.swift`; the alternates are drop-in variants for dedicated build or distribution
 checkouts:
 
-- `Package.local.swift` uses the local dependency at `../swift-argument-parser`.
+- `Package.local.swift` builds with no network access, resolving every dependency from a sibling
+  checkout: `../swift-argument-parser`, and `../swift-syntax` once the parsing target lands.
 - `Package.binary.swift` exposes local XCFrameworks and the CLI artifact bundle under `Artifacts/`.
 
 All manifests use Swift 6 language mode. CI compiles and tests with complete concurrency checking
 and treats every Swift compiler warning as an error.
+
+Vendoring the sibling checkouts needs the network, so it happens before you go offline:
+
+```bash
+git clone --depth 1 --branch 1.8.2 \
+  https://github.com/apple/swift-argument-parser.git ../swift-argument-parser
+```
+
+Once the parsing target lands, `../swift-syntax` joins it, and its tag must be on the alignment
+series `SyntaxGrammar.pinnedAlignmentSeries` pins - that constant is where the series is decided -
+because an older parser cannot represent newer syntax and would quietly stop seeing the constructs
+rules look for.
+
+`scripts/prepare-offline-validation.py` builds a disposable copy on that manifest, and refuses to
+run when a checkout the manifest names is missing or when a swift-syntax one is off the pinned
+series.
 
 ## GoldenMaster: recording behavior instead of asserting it
 

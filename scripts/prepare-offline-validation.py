@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
-"""Create a disposable validation copy using Swift's installed host libraries.
+"""Create a disposable validation copy that builds with no network access.
+
+`Package.local.swift` resolves every dependency from a sibling checkout, so the
+offline route is vendored source, not the toolchain's own libraries. This copies
+the repository, installs that manifest as the copy's `Package.swift` with each
+path dependency rewritten to the vendored checkout it names, and refuses to
+proceed unless every checkout is present and swift-syntax sits on the alignment
+series `SyntaxGrammar.pinnedAlignmentSeries` pins.
+
+Vendoring itself needs the network and is therefore not done here; a missing
+checkout is reported with the clone command that supplies it.
 
 The shipping Package.swift is NOT changed. This is not a distributable build and
 cannot verify remote dependency resolution or macOS/Xcode integration.
@@ -7,44 +17,92 @@ cannot verify remote dependency resolution or macOS/Xcode integration.
 from __future__ import annotations
 import argparse
 import pathlib
+import re
 import shutil
 import subprocess
-import json
+
+CLONE_URLS = {
+    "swift-syntax": "https://github.com/swiftlang/swift-syntax.git",
+    "swift-argument-parser": "https://github.com/apple/swift-argument-parser.git",
+}
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("destination", type=pathlib.Path, help="New, nonexistent validation directory")
+parser.add_argument(
+    "--vendor-root",
+    type=pathlib.Path,
+    help="Directory holding the vendored checkouts (default: the repository's parent)",
+)
 args = parser.parse_args()
 source = pathlib.Path(__file__).resolve().parents[1]
+vendor_root = (args.vendor_root or source.parent).resolve()
 if args.destination.exists():
     parser.error("destination must not already exist")
+
+# The series is the pin. A patch release inside a series cannot add grammar, so the offline
+# checkout only has to be on the right series, and bumping `pinnedAlignmentSeries` moves this
+# check and the manifest's version range together.
+grammar = (source / "Sources/RegressionGuardKit/Syntax/SyntaxGrammar.swift").read_text()
+series_match = re.search(r"pinnedAlignmentSeries\s*=\s*(\d+)", grammar)
+if not series_match:
+    parser.error("could not read pinnedAlignmentSeries from SyntaxGrammar.swift")
+series = int(series_match.group(1))
+
 swift = shutil.which("swift")
 if not swift:
     parser.error("swift not found")
+# Recorded, not gated. Plain parsing carries no toolchain lock, so the toolchain does not have to
+# match the series: the vendored checkout is the grammar, and the toolchain only has to build it.
 version = subprocess.check_output([swift, "--version"], text=True)
-if "Swift version 6.2" not in version:
-    parser.error("This offline harness requires a Swift 6.2.x toolchain")
-host = pathlib.Path(swift).resolve().parents[1] / "lib" / "swift" / "host"
-if not (host / "SwiftSyntax.swiftmodule").is_dir():
-    parser.error(f"SwiftSyntax host modules not found at {host}")
-shutil.copytree(source, args.destination, ignore=shutil.ignore_patterns(".build", ".git", ".swiftpm", "__pycache__"))
-manifest = args.destination / "Package.swift"
-text = manifest.read_text()
-text = "\n".join(line for line in text.splitlines() if not (
-    '.package(url: "https://github.com/swiftlang/swift-syntax.git"' in line
-    or '.product(name: "SwiftSyntax", package:' in line
-    or '.product(name: "SwiftParser", package:' in line
-    or '.product(name: "SwiftParserDiagnostics", package:' in line
-))
-host_literal = json.dumps(str(host))
-text += f'''\n
-// OFFLINE VALIDATION ONLY: uses installed toolchain modules, not the pinned package.
-for target in package.targets where target.type != .plugin {{
-    target.swiftSettings = (target.swiftSettings ?? []) + [.unsafeFlags(["-I", {host_literal}])]
-    target.linkerSettings = (target.linkerSettings ?? []) + [.unsafeFlags([
-        "-L", {host_literal}, "-Xlinker", "-rpath", "-Xlinker", {host_literal}
-    ])]
-}}
-'''
-manifest.write_text(text)
+
+manifest_text = (source / "Package.local.swift").read_text()
+dependencies = re.findall(r'\.package\(\s*path:\s*"\.\./([^"]+)"\s*\)', manifest_text)
+if not dependencies:
+    parser.error("Package.local.swift declares no path dependencies to vendor")
+
+revisions = {}
+for name in dependencies:
+    checkout = vendor_root / name
+    if not (checkout / ".git").exists():
+        hint = f"  git clone --depth 1 {CLONE_URLS[name]} {checkout}" if name in CLONE_URLS else ""
+        parser.error(
+            f"vendored checkout missing at {checkout}\n"
+            f"  vendor it while you still have network:\n{hint}"
+        )
+    tags = subprocess.check_output(
+        ["git", "-C", str(checkout), "tag", "--points-at", "HEAD"], text=True
+    ).split()
+    # Release tags only. The same commit also carries prerelease and toolchain-snapshot tags, and
+    # neither names a grammar.
+    releases = [tag for tag in tags if re.fullmatch(r"\d+\.\d+\.\d+", tag)]
+    revisions[name] = (
+        subprocess.check_output(
+            ["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True
+        ).strip(),
+        releases,
+    )
+    if name == "swift-syntax" and not any(tag.startswith(f"{series}.") for tag in releases):
+        # An under-selected grammar does not fail loudly at runtime: swift-syntax cannot represent
+        # syntax newer than itself, so rules stop seeing constructs and the change passes. The pin
+        # is the defence, so a checkout off the series has to fail here instead.
+        parser.error(
+            f"{checkout} is on {', '.join(releases) or 'no release tag'}, "
+            f"not alignment series {series}\n"
+            f"  check out a {series}.x.y tag there, then re-run"
+        )
+
+shutil.copytree(
+    source,
+    args.destination,
+    ignore=shutil.ignore_patterns(".build", ".git", ".swiftpm", "__pycache__"),
+)
+# The copy can live anywhere, so `../name` would no longer find the vendored checkout.
+for name in dependencies:
+    manifest_text = manifest_text.replace(f'"../{name}"', f'"{vendor_root / name}"')
+(args.destination / "Package.swift").write_text(manifest_text)
+
 print(args.destination.resolve())
 print(version.strip())
+print(f"pinned swift-syntax alignment series {series}")
+for name, (revision, tags) in revisions.items():
+    print(f"{name} {revision} {' '.join(tags)}")

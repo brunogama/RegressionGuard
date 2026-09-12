@@ -101,6 +101,20 @@ Find the way to swift-syntax-backed detection in RegressionGuard: syntactic evid
   and 55.0 ms per MiB on two passes an hour apart, so a threshold tight enough to catch a real
   regression would teach the repository to ignore a red test.
 
+- [Offline vendoring of swift-syntax](23-offline-vendoring-of-swift-syntax.md): offline builds carry
+  syntactic evidence at full parity, so no consumer has to be told anything - the route is a
+  vendored source checkout at `../swift-syntax` on a tag in the pinned series, reached through the
+  path dependency `Package.local.swift` already uses, and a prepared copy builds and passes all 235
+  tests with no network. The toolchain's own host modules parse correctly but are rejected: they
+  ship no `SwiftSyntax<series>` marker module, so a target compiled against them cannot report its
+  grammar and a working run becomes indistinguishable from a parserless one. A path dependency gets
+  no `Package.resolved` entry, so the checkout's tag is the entire pin, and
+  `prepare-offline-validation.py` now verifies it against `SyntaxGrammar.pinnedAlignmentSeries`
+  instead of substituting host modules; that check is inert until the manifest names swift-syntax,
+  which lands with the parsing target. Cost is +13 MiB checked out, +336 MiB of build output and
+  roughly double the clean build, none of it paid incrementally - the "much larger checkout" the
+  ticket assumed is 4x, not an order of magnitude.
+
 ## Not yet specified
 
 - Promotion of advisory AST rule families to blocking, once per-rule false-positive rates exist. Depends on calibration data that cannot be gathered until the rules have shipped and been reviewed.
