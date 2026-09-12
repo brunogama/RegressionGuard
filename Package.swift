@@ -24,7 +24,9 @@ let package = Package(
     .plugin(name: "RegressionGuardPlugin", targets: ["RegressionGuardPlugin"]),
   ],
   dependencies: [
-    .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
+    // Replaces swift-argument-parser. Pre-1.0, so `from:` admits 0.2.x only; a 0.3 would be a
+    // breaking release and is a decision rather than a resolver outcome.
+    .package(url: "https://github.com/steipete/Commander", from: "0.2.4"),
     // Pinned to one alignment series, not a floor. Each series is a new major, so `from:` cannot
     // float across them, and an under-selected parser cannot represent newer syntax - it reads it
     // into an unexpected node and the rule written to catch it stops firing. The series is decided
@@ -43,6 +45,13 @@ let package = Package(
     // Owns swift-syntax so RegressionGuardKit does not have to. Only the CLI depends on it,
     // because `Package.binary.swift` ships RegressionGuardKit as an XCFramework and a binary
     // target cannot declare package dependencies.
+    // The binding and help layer Commander does not ship: its property wrappers register metadata
+    // but never receive parsed values, and it renders no help at all. Shared so both executables
+    // fail and describe themselves identically.
+    .target(
+      name: "RegressionGuardCommandLine",
+      dependencies: [.product(name: "Commander", package: "Commander")]
+    ),
     .target(
       name: "RegressionGuardSyntax",
       dependencies: [
@@ -56,7 +65,8 @@ let package = Package(
       dependencies: [
         "RegressionGuardKit",
         "RegressionGuardSyntax",
-        .product(name: "ArgumentParser", package: "swift-argument-parser"),
+        "RegressionGuardCommandLine",
+        .product(name: "Commander", package: "Commander"),
       ]
     ),
     .target(
@@ -68,7 +78,8 @@ let package = Package(
       name: "regression-guard-observer",
       dependencies: [
         "RegressionGuardObserver",
-        .product(name: "ArgumentParser", package: "swift-argument-parser"),
+        "RegressionGuardCommandLine",
+        .product(name: "Commander", package: "Commander"),
       ],
       path: "Sources/RegressionGuard/ObserverCLI"
     ),

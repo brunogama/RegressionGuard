@@ -51,7 +51,7 @@ All three manifests declare the package identity as `RegressionGuard`. SwiftPM r
 checkouts:
 
 - `Package.local.swift` builds with no network access, resolving every dependency from a sibling
-  checkout: `../swift-argument-parser` and `../swift-syntax`.
+  checkout: `../Commander` and `../swift-syntax`.
 - `Package.binary.swift` exposes local XCFrameworks and the CLI artifact bundle under `Artifacts/`.
 
 All manifests use Swift 6 language mode. CI compiles and tests with complete concurrency checking
@@ -60,8 +60,8 @@ and treats every Swift compiler warning as an error.
 Vendoring the sibling checkouts needs the network, so it happens before you go offline:
 
 ```bash
-git clone --depth 1 --branch 1.8.2 \
-  https://github.com/apple/swift-argument-parser.git ../swift-argument-parser
+git clone --depth 1 --branch v0.2.4 \
+  https://github.com/steipete/Commander.git ../Commander
 git clone --depth 1 --branch 603.0.2 \
   https://github.com/swiftlang/swift-syntax.git ../swift-syntax
 ```
@@ -287,7 +287,8 @@ and the finding stands at text precision. Fix the finding, or lower that rule's 
 Sources/
   GoldenMaster/          snapshot recording/verification library
   RegressionGuardKit/    git diff parsing, path classification, rules, config, formatters
-  regression-guard/      CLI (swift-argument-parser)
+  RegressionGuardCommandLine/ option binding and help rendering over Commander
+  regression-guard/      CLI (Commander)
   RegressionGuardPlugin/ `swift package regression-guard` command plugin
 Tests/
   GoldenMasterTests/

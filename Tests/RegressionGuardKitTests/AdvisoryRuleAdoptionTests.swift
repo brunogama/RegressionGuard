@@ -102,7 +102,7 @@ struct AdvisoryRuleAdoptionTests {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appendingPathComponent("Sources/regression-guard/RegressionGuardCommand.swift")
+      .appendingPathComponent("Sources/regression-guard/InitCommand.swift")
     return try? String(contentsOf: url, encoding: .utf8)
   }
 }

@@ -29,7 +29,7 @@ import subprocess
 
 CLONE_URLS = {
     "swift-syntax": "https://github.com/swiftlang/swift-syntax.git",
-    "swift-argument-parser": "https://github.com/apple/swift-argument-parser.git",
+    "Commander": "https://github.com/steipete/Commander.git",
 }
 
 parser = argparse.ArgumentParser(description=__doc__)
@@ -79,8 +79,9 @@ for name in dependencies:
         ["git", "-C", str(checkout), "tag", "--points-at", "HEAD"], text=True
     ).split()
     # Release tags only. The same commit also carries prerelease and toolchain-snapshot tags, and
-    # neither names a grammar.
-    releases = [tag for tag in tags if re.fullmatch(r"\d+\.\d+\.\d+", tag)]
+    # neither names a version. The `v` prefix is optional because the vendored checkouts disagree
+    # about it: swift-syntax tags `603.0.2` and Commander tags `v0.2.4`.
+    releases = [tag for tag in tags if re.fullmatch(r"v?\d+\.\d+\.\d+", tag)]
     revisions[name] = (
         subprocess.check_output(
             ["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True

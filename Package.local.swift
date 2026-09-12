@@ -20,7 +20,7 @@ let package = Package(
     .plugin(name: "RegressionGuardPlugin", targets: ["RegressionGuardPlugin"]),
   ],
   dependencies: [
-    .package(path: "../swift-argument-parser"),
+    .package(path: "../Commander"),
     // A path dependency gets no `Package.resolved` entry, so this checkout's own tag is the entire
     // pin - there is no resolver to enforce the range `Package.swift` declares. It must sit on the
     // series `SyntaxGrammar.pinnedAlignmentSeries` names, and
@@ -36,6 +36,13 @@ let package = Package(
       name: "RegressionGuardKit",
       dependencies: []
     ),
+    // The binding and help layer Commander does not ship: its property wrappers register metadata
+    // but never receive parsed values, and it renders no help at all. Shared so both executables
+    // fail and describe themselves identically.
+    .target(
+      name: "RegressionGuardCommandLine",
+      dependencies: [.product(name: "Commander", package: "Commander")]
+    ),
     .target(
       name: "RegressionGuardSyntax",
       dependencies: [
@@ -49,7 +56,8 @@ let package = Package(
       dependencies: [
         "RegressionGuardKit",
         "RegressionGuardSyntax",
-        .product(name: "ArgumentParser", package: "swift-argument-parser"),
+        "RegressionGuardCommandLine",
+        .product(name: "Commander", package: "Commander"),
       ]
     ),
     .target(
@@ -61,7 +69,8 @@ let package = Package(
       name: "regression-guard-observer",
       dependencies: [
         "RegressionGuardObserver",
-        .product(name: "ArgumentParser", package: "swift-argument-parser"),
+        "RegressionGuardCommandLine",
+        .product(name: "Commander", package: "Commander"),
       ],
       path: "Sources/RegressionGuard/ObserverCLI"
     ),
