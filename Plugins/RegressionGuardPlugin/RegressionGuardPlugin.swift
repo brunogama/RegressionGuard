@@ -16,10 +16,10 @@ struct RegressionGuardPlugin: CommandPlugin {
     } else {
       passthroughArguments += arguments
     }
-    passthroughArguments += ["--path", context.package.directory.string]
+    passthroughArguments += ["--path", context.package.directoryURL.path]
 
     let process = Process()
-    process.executableURL = URL(fileURLWithPath: tool.path.string)
+    process.executableURL = tool.url
     process.arguments = passthroughArguments
     try process.run()
     process.waitUntilExit()
