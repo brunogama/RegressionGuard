@@ -10,21 +10,17 @@ let package = Package(
     .watchOS(.v8),
   ],
   products: [
-    // Link into any test target to record/compare golden-master snapshots.
     .library(name: "GoldenMaster", targets: ["GoldenMaster"]),
-    // The detection engine, usable as a library (e.g. from a custom CLI or plugin).
     .library(name: "RegressionGuardKit", targets: ["RegressionGuardKit"]),
-    // The CI-facing command line tool.
     .executable(name: "regression-guard", targets: ["regression-guard"]),
     .executable(
       name: "regression-guard-observer",
       targets: ["regression-guard-observer"]
     ),
-    // `swift package regression-guard` command plugin.
     .plugin(name: "RegressionGuardPlugin", targets: ["RegressionGuardPlugin"]),
   ],
   dependencies: [
-    .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0")
+    .package(path: "../swift-argument-parser")
   ],
   targets: [
     .target(

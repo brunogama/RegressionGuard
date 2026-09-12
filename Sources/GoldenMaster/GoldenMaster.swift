@@ -17,7 +17,7 @@ import Foundation
 public enum Characterization {
 
   /// Directory name created alongside each test file that records snapshots.
-  public static var directoryName = "__GoldenMasters__"
+  public static let directoryName = "__GoldenMasters__"
 
   /// Verify or record a snapshot for an arbitrary `CharacterizationSnapshottable` value.
   ///

@@ -41,6 +41,17 @@ And to the targets that need it:
 )
 ```
 
+### Alternate manifests
+
+SwiftPM reads only `Package.swift`; the alternate manifests are drop-in variants for dedicated
+build or distribution checkouts:
+
+- `Package.local.swift` uses the local dependency at `../swift-argument-parser`.
+- `Package.binary.swift` exposes local XCFrameworks and the CLI artifact bundle under `Artifacts/`.
+
+All manifests use Swift 6 language mode. CI compiles and tests with complete concurrency checking
+and treats every Swift compiler warning as an error.
+
 ## GoldenMaster: recording behavior instead of asserting it
 
 ```swift
