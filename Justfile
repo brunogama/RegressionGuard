@@ -11,13 +11,13 @@ default:
 build:
     swift build --build-tests {{strict}}
 
-# Run the test suite.
+# Run the test suite. `pipefail` is set above, so a failure still fails the recipe.
 test:
-    swift test --parallel {{strict}}
+    swift test --parallel {{strict}} | xcbeautify -q
 
 # Run the tests with coverage and enforce the RegressionGuardKit floor.
 coverage:
-    swift test --enable-code-coverage --parallel {{strict}}
+    swift test --enable-code-coverage --parallel {{strict}} | xcbeautify -q
     ./scripts/coverage-gate.sh
 
 # Format Swift sources in place.
