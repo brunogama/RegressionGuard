@@ -50,29 +50,31 @@ All three manifests declare the package identity as `RegressionGuard`. SwiftPM r
 `Package.swift`; the alternates are drop-in variants for dedicated build or distribution
 checkouts:
 
-- `Package.local.swift` builds with no network access, resolving every dependency from a sibling
-  checkout: `../Commander` and `../swift-syntax`.
+- `Package.local.swift` builds with no network access. swift-syntax is committed into this
+  repository as a bare git repository under `Vendor/`, so nothing is fetched for it; Commander
+  still resolves from a sibling checkout at `../Commander`. See `Vendor/README.md`.
 - `Package.binary.swift` exposes local XCFrameworks and the CLI artifact bundle under `Artifacts/`.
 
 All manifests use Swift 6 language mode. CI compiles and tests with complete concurrency checking
 and treats every Swift compiler warning as an error.
 
-Vendoring the sibling checkouts needs the network, so it happens before you go offline:
+Commander is still a sibling checkout, so vendoring it needs the network once, before you go
+offline:
 
 ```bash
 git clone --depth 1 --branch v0.2.4 \
   https://github.com/steipete/Commander.git ../Commander
-git clone --depth 1 --branch 603.0.2 \
-  https://github.com/swiftlang/swift-syntax.git ../swift-syntax
 ```
 
-A path dependency gets no `Package.resolved` entry, so that checkout's tag is the whole pin - there
-is no resolver to hold it to the range `Package.swift` declares. It must be on the alignment series
-`SyntaxGrammar.pinnedAlignmentSeries` names, which is where the series is decided, because an older
-parser cannot represent newer syntax and would quietly stop seeing the constructs rules look for.
+swift-syntax needs no such step. It is referenced as local source control rather than as a path
+dependency, so the resolver reads the tags of the committed repository and enforces the same range
+`Package.swift` declares: a vendored copy off the alignment series
+`SyntaxGrammar.pinnedAlignmentSeries` names fails to resolve rather than quietly building a grammar
+the rules were not written against.
 
-`scripts/prepare-offline-validation.py` builds a disposable copy on that manifest, and refuses to
-run when a checkout the manifest names is missing or when the swift-syntax one is off that series.
+`scripts/prepare-offline-validation.py` builds a disposable copy on that manifest. It refuses to run
+when a sibling checkout the manifest names is missing, or when the declared swift-syntax range has
+drifted from `SyntaxGrammar.pinnedAlignmentSeries` - the one mismatch the resolver cannot see.
 Build the copy with a plain `swift build --build-tests` and `swift test`: it already carries CI's
 strict flags on its own targets. Adding `-Xswiftc -warnings-as-errors` on the command line instead
 would reach the vendored checkouts, whose own deprecation warnings would fail a build this

@@ -21,11 +21,16 @@ let package = Package(
   ],
   dependencies: [
     .package(path: "../Commander"),
-    // A path dependency gets no `Package.resolved` entry, so this checkout's own tag is the entire
-    // pin - there is no resolver to enforce the range `Package.swift` declares. It must sit on the
-    // series `SyntaxGrammar.pinnedAlignmentSeries` names, and
-    // `scripts/prepare-offline-validation.py` refuses to build a copy when it does not.
-    .package(path: "../swift-syntax"),
+    // A bare git repository committed into this one, not a path dependency. The distinction is the
+    // whole point: a path dependency gets no `Package.resolved` entry and no version, so the
+    // checkout would be its own pin. Referenced as local source control, the resolver reads the
+    // tags and enforces the same range `Package.swift` declares - a vendored copy off the pinned
+    // series fails resolution instead of quietly building the wrong grammar.
+    //
+    // The path is relative, so the clone carries everything an offline build needs. It is declared
+    // only here: naming it in `Package.swift` would give it the identity `swift-syntax` in every
+    // consumer's graph and silently replace the swift-syntax they asked for.
+    .package(url: "Vendor/swift-syntax.git", "603.0.0"..<"604.0.0"),
   ],
   targets: [
     .target(

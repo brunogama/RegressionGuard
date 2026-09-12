@@ -66,6 +66,23 @@ dependencies = re.findall(r'\.package\(\s*path:\s*"\.\./([^"]+)"\s*\)', manifest
 if not dependencies:
     parser.error("Package.local.swift declares no path dependencies to vendor")
 
+# swift-syntax is vendored in-tree as a bare repository, so the resolver enforces the declared
+# range against its tags and a copy off the series fails to resolve. What the resolver cannot see
+# is the range drifting from the constant the rules are written against, so that is checked here.
+vendored_syntax = source / "Vendor/swift-syntax.git"
+if not (vendored_syntax / "HEAD").exists():
+    parser.error(f"vendored swift-syntax repository missing at {vendored_syntax}")
+declared = re.search(
+    r'\.package\(\s*url:\s*"Vendor/swift-syntax\.git",\s*"(\d+)\.', manifest_text
+)
+if not declared:
+    parser.error("Package.local.swift does not declare the vendored swift-syntax repository")
+if int(declared.group(1)) != series:
+    parser.error(
+        f"Package.local.swift pins swift-syntax series {declared.group(1)}, but "
+        f"SyntaxGrammar.pinnedAlignmentSeries says {series}"
+    )
+
 revisions = {}
 for name in dependencies:
     checkout = vendor_root / name
@@ -101,7 +118,12 @@ for name in dependencies:
 shutil.copytree(
     source,
     args.destination,
-    ignore=shutil.ignore_patterns(".build", ".git", ".swiftpm", "__pycache__"),
+    # `Package.resolved` is dropped deliberately. It belongs to `Package.swift`, which pins
+    # swift-syntax to its upstream URL, and carrying it into a copy whose manifest resolves the
+    # vendored repository instead sends SwiftPM to the network for a pin the copy does not use.
+    ignore=shutil.ignore_patterns(
+        ".build", ".git", ".swiftpm", "__pycache__", "Package.resolved"
+    ),
 )
 # The copy can live anywhere, so `../name` would no longer find the vendored checkout.
 for name in dependencies:

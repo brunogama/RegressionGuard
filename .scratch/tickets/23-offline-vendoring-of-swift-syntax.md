@@ -99,6 +99,56 @@ And the old script left swift-argument-parser as a remote dependency, so the "of
 copy it produced still needed the network - it was never offline. The prepared copy now builds and
 runs all 235 tests under `--disable-automatic-resolution`.
 
+## Amendment: the checkout is committed, as a bare repository
+
+The sibling-checkout route above is superseded for swift-syntax. It required a network step before
+going offline, and its pin was unenforced - the weakness this ticket recorded as accepted. Both are
+gone: `Vendor/swift-syntax.git` is a bare git repository committed into this one, and
+`Package.local.swift` references it as local source control:
+
+    .package(url: "Vendor/swift-syntax.git", "603.0.0"..<"604.0.0")
+
+A bare repository is directories of git objects with no working tree and no nested `.git`, so the
+outer repository tracks it as 23 ordinary files. Because it is source control rather than a path,
+**the resolver reads its tags and enforces the range**, recording `603.0.2` at `79e4b74a` in
+`Package.resolved`; a copy off the series fails resolution with "no versions match the requirement"
+instead of silently building the wrong grammar. Measured cost: 1.8 MiB against a repository whose
+entire history was 1.0 MiB packed. Committing the source instead would have been ~870 KiB, and
+pruning to the minimal parsing closure - `SwiftSyntax`, `SwiftParser`, `_SwiftSyntaxCShims`, the
+version markers - saves only about 200 KiB packed while turning the copy into a fork, so it was
+rejected.
+
+### Why it is named only in `Package.local.swift`
+
+This is the constraint the whole arrangement rests on, and it was measured rather than assumed. A
+vendored copy referenced from the published `Package.swift` takes the package identity
+`swift-syntax` in every consumer's graph. A consumer that also depends on swift-syntax then gets
+*this* copy: SwiftPM emits "Conflicting identity for swift-syntax ... will be escalated to an error
+in future versions", and the build proceeds having never fetched what the consumer declared - no
+`Package.resolved` entry, no network fetch, one `SwiftSyntax` compiled. Silently substituting a
+dependency somebody pinned is the exact failure this project exists to catch, so the vendored
+repository stays out of the published manifest and `Package.swift` keeps the upstream URL. Verified
+on the other side too: with the copy present but unreferenced, a consumer resolves upstream
+normally and sees no warning.
+
+Two alternatives were tested and dropped. SwiftPM's dependency mirroring works and is root-only -
+a consumer ignores a dependency's `mirrors.json` entirely - but `mirrors.json` rejects relative
+paths, so the committed file would carry one machine's absolute path. Referencing the bare
+repository by relative URL achieves the same enforcement with nothing to configure. A prebuilt
+XCFramework was rejected outright: it ships no `SwiftSyntax<series>` marker module, so the run
+could not name its grammar, which is the same reason the toolchain host modules lost.
+
+One offline bug surfaced while verifying this and is fixed: the prepared copy inherited
+`Package.resolved` from the source tree, which pins swift-syntax to its upstream URL, and SwiftPM
+went to the network for a pin the copy does not use. The harness now drops it.
+
+The resolver cannot see one drift: the declared range diverging from
+`SyntaxGrammar.pinnedAlignmentSeries`. `prepare-offline-validation.py` checks exactly that and
+nothing else about swift-syntax, since the resolver owns the rest.
+
+Commander is still a sibling checkout at `../Commander`, so an offline build is not yet free of
+network setup. The same treatment applies to it unchanged.
+
 ### Strictness is a manifest setting offline, not a command-line one
 
 The offline route cannot be built with `swift build -Xswiftc -warnings-as-errors`, and this is a

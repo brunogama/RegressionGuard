@@ -31,13 +31,19 @@ rev = "v6.0.0"
 
 # Recorded golden masters are byte-exact baselines; whitespace fixers must not
 # rewrite them or every test run leaves the working tree dirty.
+#
+# `Vendor/swift-syntax.git` is excluded for the same reason and a sharper one: it is a real git
+# repository's own storage. Git writes `packed-refs` with a trailing space on its header line, and
+# stripping it edits another tool's data structure to satisfy a style rule. Everything under
+# `Vendor/` is upstream bytes this repository stores rather than authors.
 [[repos.hooks]]
 id = "trailing-whitespace"
-exclude = "\\.md$|__GoldenMasters__/"
+exclude = "\\.md$|__GoldenMasters__/|^Vendor/"
 
 [[repos.hooks]]
 id = "end-of-file-fixer"
-exclude = "__GoldenMasters__/"
+exclude = "__GoldenMasters__/|^Vendor/"
 
 [[repos.hooks]]
 id = "mixed-line-ending"
+exclude = "^Vendor/"
