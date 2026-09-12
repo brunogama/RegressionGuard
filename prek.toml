@@ -1,0 +1,40 @@
+# Repository hooks shared by local development and pull-request CI.
+# See https://prek.j178.dev for configuration details.
+#:schema https://www.schemastore.org/prek.json
+
+default_install_hook_types = ["pre-commit"]
+default_stages = ["pre-commit"]
+fail_fast = true
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "swift-format-check"
+name = "Check Swift formatting"
+entry = "swift-format lint --recursive"
+language = "system"
+files = "\\.swift$"
+pass_filenames = true
+
+[[repos.hooks]]
+id = "swiftlint-strict"
+name = "Run SwiftLint strictly"
+entry = "swiftlint lint --strict"
+language = "system"
+pass_filenames = false
+always_run = true
+
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v6.0.0"
+
+[[repos.hooks]]
+id = "trailing-whitespace"
+exclude = "\\.md$"
+
+[[repos.hooks]]
+id = "end-of-file-fixer"
+
+[[repos.hooks]]
+id = "mixed-line-ending"

@@ -11,22 +11,22 @@ watch=false
 
 for argument in "$@"; do
   case "$argument" in
-    --once)
-      ;;
-    --watch)
-      watch=true
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    [0-9]*)
-      pr_number="$argument"
-      ;;
-    *)
-      usage
-      exit 2
-      ;;
+  --once)
+    ;;
+  --watch)
+    watch=true
+    ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  [0-9]*)
+    pr_number="$argument"
+    ;;
+  *)
+    usage
+    exit 2
+    ;;
   esac
 done
 
@@ -53,18 +53,18 @@ report() {
       [[ -z "$run_id" ]] && continue
       printf '\n--- Failed run %s ---\n' "$run_id"
       gh run view "$run_id" --log-failed || true
-    done <<< "$failed_run_ids"
+    done <<<"$failed_run_ids"
   fi
 
   printf '\n=== Reviews ===\n'
   gh api "repos/$repository/pulls/$pr_number/reviews?per_page=100" \
-    --jq '.[] | "\(.user.login): \(.state) at \(.submitted_at // "pending")\n\(.body // "")"' \
-    || true
+    --jq '.[] | "\(.user.login): \(.state) at \(.submitted_at // "pending")\n\(.body // "")"' ||
+    true
 
   printf '\n=== Inline review comments ===\n'
   gh api "repos/$repository/pulls/$pr_number/comments?per_page=100" \
-    --jq '.[] | "\(.user.login) on \(.path):\(.line // .original_line // 0)\n\(.body)"' \
-    || true
+    --jq '.[] | "\(.user.login) on \(.path):\(.line // .original_line // 0)\n\(.body)"' ||
+    true
 }
 
 if ! $watch; then
