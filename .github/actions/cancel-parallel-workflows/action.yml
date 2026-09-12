@@ -11,6 +11,7 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
         HEAD_SHA: ${{ inputs.head-sha }}
+        CURRENT_RUN_ID: ${{ github.run_id }}
       run: |
         set -euo pipefail
         endpoint="repos/${GITHUB_REPOSITORY}/actions/runs"
@@ -19,5 +20,6 @@ runs:
           "${endpoint}?${query}" \
           --jq '.workflow_runs[].id' |
           while read -r run_id; do
+            [[ "$run_id" == "$CURRENT_RUN_ID" ]] && continue
             gh api --method POST "${endpoint}/${run_id}/cancel" || true
           done
