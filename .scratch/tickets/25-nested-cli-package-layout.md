@@ -213,3 +213,42 @@ resolution cost for consumers who never invoke it.
 `REGRESSIONGUARD_OFFLINE`, read by the CLI manifest - a legitimate use precisely because no
 consumer resolves that manifest. This supersedes the parts of ticket 23's resolution that name
 those files.
+
+## Amendment: the plugin ships from its own package
+
+Option (1) - the root declaring `.binaryTarget(url:checksum:)` - was the recorded destination and is
+withdrawn. It was priced at 8 MiB per consumer. The price it did not name is this repository's own
+offline build.
+
+Measured while preparing the 0.1.0 release, by pointing the root's binary target at a public bundle
+and resolving the *CLI* package:
+
+    Downloading binary artifact https://github.com/realm/SwiftLint/...
+    error: failed downloading ... which is required by binary target 'regression-guard'
+
+`RegressionGuardCLI` depends on the root package, so the root's artifact is in its graph, and
+SwiftPM resolves binary targets for the whole graph whether or not anything uses them. A binary
+target in the root manifest therefore makes a network fetch the price of `just offline` - the
+property tickets 23 and 25 exist to establish.
+
+So the plugin goes where this ticket considered and rejected sending the whole CLI: its own
+repository, `RegressionGuardPlugin`, holding nothing but the binary target and the plugin. The
+rejection reasoning was about the CLI's source, which would have taken `Vendor/` and the whole build
+with it; a plugin package is a manifest and one file, and the release-in-step cost is a version
+table in its README.
+
+The three-way trade, now that all of it is measured:
+
+| | consumer of the libraries | consumer of the plugin | this repository offline |
+|---|---|---|---|
+| binary target in the root | 8 MiB | 8 MiB | broken |
+| plugin in the nested package | nothing | cannot have it | works |
+| plugin in its own package | nothing | 8 MiB | works |
+
+Verified before publishing anything: a throwaway consumer depending on the staged plugin package by
+path resolved the CLI from a local artifact bundle and reported `implementation_stubbed` on a stubbed
+function - which also proves the parser ships inside the released binary, since that family has no
+text fallback.
+
+`RegressionGuardCLI/Plugins/` keeps its copy of the plugin, which is what makes the verb work in a
+clone with no release to download.

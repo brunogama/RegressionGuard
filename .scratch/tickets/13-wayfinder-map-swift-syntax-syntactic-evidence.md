@@ -173,10 +173,10 @@ Find the way to swift-syntax-backed detection in RegressionGuard: syntactic evid
 - Promotion of advisory AST rule families to blocking, once per-rule false-positive rates exist. Depends on calibration data that cannot be gathered until the rules have shipped and been reviewed.
 - Whether syntactic evidence enables precise, evidence-bounded fix-its in the agent remediation prompt, beyond the deterministic hints already decided. A tree makes concrete rewrites expressible for the first time.
 - How syntactic evidence interacts with generated or vendored Swift that is in a guarded repository but not authored by it.
-- When the command plugin becomes available to consumers again. The layout ticket settled the
-  destination - the root declaring `.binaryTarget(url:checksum:)` against the artifact bundle
-  `scripts/build-artifactbundle.py` already builds - but `url:` needs a published release to point
-  at, so the plugin sits in the nested package and reaches nobody until one is cut.
+- Nothing on the plugin: it ships from `RegressionGuardPlugin`, a package of its own. The root
+  declaring the binary target was measured to break this repository's offline build, because the
+  nested CLI package depends on the root and SwiftPM resolves binary targets for the whole graph.
+  Recorded as an amendment on [Nested CLI package layout](25-nested-cli-package-layout.md).
 - Whether a run should cap the source it retains at once. The parse performance budget measured a retained tree at about 50x its source and a 15.31 MiB diff peaking at 781.9 MiB, which fits a standard runner but not a small container. A cap means degrading part of a change to line-based detection, which is a policy question the budget ticket deliberately did not answer.
 
 ## Out of scope

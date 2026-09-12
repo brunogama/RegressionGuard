@@ -145,9 +145,24 @@ uncommitted content when `--head` is a real ref; line-based checks work either w
 
 ### As a SwiftPM plugin (local, one command)
 
+The plugin ships from a package of its own, [RegressionGuardPlugin][plugin], so that the prebuilt
+CLI it runs is resolved only by projects that want the command:
+
+```swift
+.package(url: "https://github.com/brunogama/RegressionGuardPlugin", from: "0.1.0")
+```
+
 ```sh
 swift package regression-guard --base origin/main
 ```
+
+SwiftPM downloads binary artifacts at resolve time whether or not anything uses them, and for the
+whole graph - so declaring the CLI's artifact here would charge it to every consumer of
+`GoldenMaster`, and to this repository's own offline builds. Keeping it in the plugin package means
+a project that wants the verb pays 8 MiB for it and a project that wants the libraries pays nothing.
+The two repositories are released in step; the plugin's README carries the version table.
+
+[plugin]: https://github.com/brunogama/RegressionGuardPlugin
 
 ### As a GitHub Action (CI, one line)
 
@@ -303,7 +318,8 @@ RegressionGuardCLI/      nested package; nothing depends on it, so nothing inher
     RegressionGuardSyntax/     swift-syntax parsing, projected into RegressionGuardKit's types
     RegressionGuardCommandLine/ option binding and help rendering Commander does not provide
   Plugins/
-    RegressionGuardPlugin/ `swift package regression-guard` command plugin
+    RegressionGuardPlugin/ the same command plugin, built from source for work in a clone; the
+                           published one lives in the RegressionGuardPlugin repository
   Tests/
     RegressionGuardSyntaxTests/ projection and grammar tests
     RegressionGuardCLITests/    drives the built binary against a scratch repository
