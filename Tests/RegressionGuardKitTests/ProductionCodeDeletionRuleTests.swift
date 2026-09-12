@@ -4,27 +4,27 @@ import XCTest
 final class ProductionCodeDeletionRuleTests: XCTestCase {
   let rule = ProductionCodeDeletionRule()
 
-  func testFlagsForceUnwrapIntroduced() {
+  func testFlagsForceUnwrapIntroduced() async {
     let diff = TestSupport.fileDiff(
       path: "Sources/Foo.swift",
       removed: ["    guard let value = maybeValue else { return nil }"],
       added: ["    let value = maybeValue!"]
     )
-    let violations = rule.evaluate(fileDiff: diff, context: TestSupport.context())
+    let violations = await rule.evaluate(fileDiff: diff, context: TestSupport.context())
     XCTAssertTrue(violations.contains { $0.message.contains("Force-unwrap") })
   }
 
-  func testFlagsEmptyCatchBlock() {
+  func testFlagsEmptyCatchBlock() async {
     let diff = TestSupport.fileDiff(
       path: "Sources/Foo.swift",
       removed: ["    } catch { log.error(error) }"],
       added: ["    } catch {}"]
     )
-    let violations = rule.evaluate(fileDiff: diff, context: TestSupport.context())
+    let violations = await rule.evaluate(fileDiff: diff, context: TestSupport.context())
     XCTAssertTrue(violations.contains { $0.message.contains("Empty") })
   }
 
-  func testFlagsLopsidedControlFlowDeletion() {
+  func testFlagsLopsidedControlFlowDeletion() async {
     let diff = TestSupport.fileDiff(
       path: "Sources/Foo.swift",
       removed: [
@@ -34,31 +34,31 @@ final class ProductionCodeDeletionRuleTests: XCTestCase {
       ],
       added: []
     )
-    let violations = rule.evaluate(fileDiff: diff, context: TestSupport.context())
+    let violations = await rule.evaluate(fileDiff: diff, context: TestSupport.context())
     XCTAssertFalse(violations.isEmpty)
   }
 
-  func testDoesNotFlagGenuineRefactor() {
+  func testDoesNotFlagGenuineRefactor() async {
     let diff = TestSupport.fileDiff(
       path: "Sources/Foo.swift",
       removed: ["    if !isValid { throw ValidationError.invalid }"],
       added: ["    guard isValid else { throw ValidationError.invalid }"]
     )
-    let violations = rule.evaluate(fileDiff: diff, context: TestSupport.context())
+    let violations = await rule.evaluate(fileDiff: diff, context: TestSupport.context())
     XCTAssertTrue(violations.isEmpty)
   }
 
-  func testIgnoresTestFiles() {
+  func testIgnoresTestFiles() async {
     let diff = TestSupport.fileDiff(
       path: "Tests/FooTests.swift",
       removed: ["    guard let value = maybeValue else { return nil }"],
       added: ["    let value = maybeValue!"]
     )
-    let violations = rule.evaluate(fileDiff: diff, context: TestSupport.context())
+    let violations = await rule.evaluate(fileDiff: diff, context: TestSupport.context())
     XCTAssertTrue(violations.isEmpty)
   }
 
-  func testDoesNotFlagBooleanNegationOrNotEqual() {
+  func testDoesNotFlagBooleanNegationOrNotEqual() async {
     let diff = TestSupport.fileDiff(
       path: "Sources/Foo.swift",
       removed: [],
@@ -67,7 +67,7 @@ final class ProductionCodeDeletionRuleTests: XCTestCase {
         "    guard a != b else { return }",
       ]
     )
-    let violations = rule.evaluate(fileDiff: diff, context: TestSupport.context())
+    let violations = await rule.evaluate(fileDiff: diff, context: TestSupport.context())
     XCTAssertTrue(violations.isEmpty)
   }
 }

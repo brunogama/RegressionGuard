@@ -20,12 +20,17 @@ public struct WeakenedAssertionRule: Rule {
 
   public init() {}
 
-  public func evaluate(fileDiff: FileDiff, context: RuleContext) -> [Violation] {
+  public func evaluate(fileDiff: FileDiff, context: RuleContext) async -> [Violation] {
     guard context.pathClassifier.isTestPath(fileDiff.displayPath) else { return [] }
     let severity = Self.settings(from: context).severity
+    let deleted = await deletedFileViolations(
+      fileDiff: fileDiff,
+      context: context,
+      severity: severity
+    )
     return tautologyViolations(fileDiff: fileDiff, severity: severity)
       + removedAssertionViolations(fileDiff: fileDiff, severity: severity)
-      + deletedFileViolations(fileDiff: fileDiff, context: context, severity: severity)
+      + deleted
   }
 
   private func tautologyViolations(fileDiff: FileDiff, severity: Severity) -> [Violation] {
@@ -73,9 +78,10 @@ public struct WeakenedAssertionRule: Rule {
     fileDiff: FileDiff,
     context: RuleContext,
     severity: Severity
-  ) -> [Violation] {
+  ) async -> [Violation] {
     guard fileDiff.isDeleted, let oldPath = fileDiff.oldPath else { return [] }
-    guard let oldContent = context.repository.show(ref: context.baseRef, path: oldPath) else {
+    guard let oldContent = await context.repository.show(ref: context.baseRef, path: oldPath)
+    else {
       return []
     }
 

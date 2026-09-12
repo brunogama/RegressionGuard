@@ -7,15 +7,16 @@ public struct ProductionCodeDeletionRule: Rule {
 
   public init() {}
 
-  public func evaluate(fileDiff: FileDiff, context: RuleContext) -> [Violation] {
+  public func evaluate(fileDiff: FileDiff, context: RuleContext) async -> [Violation] {
     let severity = Self.settings(from: context).severity
-    return
-      (ControlFlowDeletionRule().evaluate(fileDiff: fileDiff, context: context)
-      + UncheckedErrorPathRule().evaluate(fileDiff: fileDiff, context: context)).map { finding in
-        var finding = finding
-        finding.severity = severity
-        return finding
-      }
+    // Both are called on their concrete types, whose bodies are synchronous, so no `await`.
+    let controlFlow = ControlFlowDeletionRule().evaluate(fileDiff: fileDiff, context: context)
+    let errorHandling = UncheckedErrorPathRule().evaluate(fileDiff: fileDiff, context: context)
+    return (controlFlow + errorHandling).map { finding in
+      var finding = finding
+      finding.severity = severity
+      return finding
+    }
   }
 }
 

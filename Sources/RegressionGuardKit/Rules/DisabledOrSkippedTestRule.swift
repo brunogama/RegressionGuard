@@ -15,13 +15,18 @@ public struct DisabledOrSkippedTestRule: Rule {
 
   public init() {}
 
-  public func evaluate(fileDiff: FileDiff, context: RuleContext) -> [Violation] {
+  public func evaluate(fileDiff: FileDiff, context: RuleContext) async -> [Violation] {
     guard context.pathClassifier.isTestPath(fileDiff.displayPath) else { return [] }
     let severity = Self.settings(from: context).severity
+    let identity = await functionIdentityViolations(
+      fileDiff: fileDiff,
+      context: context,
+      severity: severity
+    )
     return deletedTestFileViolations(fileDiff: fileDiff, severity: severity)
       + skipMarkerViolations(fileDiff: fileDiff, severity: severity)
       + commentedOutTestViolations(fileDiff: fileDiff, severity: severity)
-      + functionIdentityViolations(fileDiff: fileDiff, context: context, severity: severity)
+      + identity
   }
 
   private func deletedTestFileViolations(
@@ -42,7 +47,8 @@ public struct DisabledOrSkippedTestRule: Rule {
 
   private func skipMarkerViolations(fileDiff: FileDiff, severity: Severity) -> [Violation] {
     var violations: [Violation] = []
-    for added in fileDiff.addedLines where Self.containsSkipMarker(added.text) {
+    for added in fileDiff.addedLines
+    where Self.containsSkipMarker(Self.ignoringDeclaredName(added.text)) {
       violations.append(
         Violation(
           ruleID: Self.ruleID,
@@ -81,16 +87,18 @@ public struct DisabledOrSkippedTestRule: Rule {
     fileDiff: FileDiff,
     context: RuleContext,
     severity: Severity
-  ) -> [Violation] {
+  ) async -> [Violation] {
     guard let oldPath = fileDiff.oldPath else { return [] }
     let newPath = fileDiff.newPath ?? oldPath
-    guard let oldContent = context.repository.show(ref: context.baseRef, path: oldPath) else {
+    guard let oldContent = await context.repository.show(ref: context.baseRef, path: oldPath)
+    else {
       return []
     }
-    guard let newContent = context.repository.show(ref: context.headRef, path: newPath) else {
+    guard let newContent = await context.repository.show(ref: context.headRef, path: newPath)
+    else {
       return []
     }
-    return Self.compareTestFunctions(
+    return TestFunctionIdentity.violations(
       old: oldContent,
       new: newContent,
       path: fileDiff.displayPath,
@@ -118,108 +126,21 @@ public struct DisabledOrSkippedTestRule: Rule {
     skipMarkers.contains { text.contains($0) }
   }
 
+  /// The line with the identifier a `func` declares removed, and nothing else.
+  ///
+  /// A test named after what it checks - `testFlagsXCTSkipAddedToATest` - is not a skipped test,
+  /// and matching the marker inside its own name blocks the author for naming the thing. Only the
+  /// identifier goes: the rest of the line stays, so a one-liner that really does
+  /// `func f() { throw XCTSkip(...) }` is still caught.
+  private static func ignoringDeclaredName(_ text: String) -> String {
+    guard let keyword = text.range(of: "func "),
+      let name = TestFunctionIdentity.name(in: text),
+      let nameEnd = text.index(keyword.upperBound, offsetBy: name.count, limitedBy: text.endIndex)
+    else { return text }
+    return text.replacingCharacters(in: keyword.upperBound..<nameEnd, with: "")
+  }
+
   private static func normalizedCode(_ text: String) -> String {
     text.trimmingCharacters(in: .whitespaces)
-  }
-
-  private typealias TestFunction = (name: String, isTest: Bool)
-
-  private static func compareTestFunctions(
-    old: String,
-    new: String,
-    path: String,
-    severity: Severity
-  ) -> [Violation] {
-    // Overloads share a name, so a name maps to a whole overload set rather than one function.
-    // The set keeps its test identity as long as any member of it still reads as a test.
-    let survivesAsTest = Dictionary(
-      extractFunctions(from: new).map { ($0.name, $0.isTest) },
-      uniquingKeysWith: { $0 || $1 }
-    )
-    var violations: [Violation] = []
-
-    for oldFunc in extractFunctions(from: old) where oldFunc.isTest {
-      guard let isStillTest = survivesAsTest[oldFunc.name] else {
-        violations.append(removedFunctionViolation(oldFunc, path, severity))
-        continue
-      }
-      if !isStillTest {
-        violations.append(lostIdentityViolation(oldFunc, path, severity))
-      }
-    }
-    return violations
-  }
-
-  private static func removedFunctionViolation(
-    _ function: TestFunction,
-    _ path: String,
-    _ severity: Severity
-  ) -> Violation {
-    Violation(
-      ruleID: ruleID,
-      severity: severity,
-      file: path,
-      message: "Test function `\(function.name)` was removed rather than fixed.",
-      detail: nil
-    )
-  }
-
-  private static func lostIdentityViolation(
-    _ function: TestFunction,
-    _ path: String,
-    _ severity: Severity
-  ) -> Violation {
-    Violation(
-      ruleID: ruleID,
-      severity: severity,
-      file: path,
-      message: "Test function `\(function.name)` lost its test identity.",
-      detail: "A removed `test...` name or `@Test` attribute can hide a failing test."
-    )
-  }
-
-  private static func extractFunctions(from content: String) -> [TestFunction] {
-    let lines = content.components(separatedBy: "\n")
-    var results: [TestFunction] = []
-
-    for (index, line) in lines.enumerated() {
-      guard let name = functionName(in: line) else { continue }
-      let function: TestFunction = (
-        name, isTest: isTest(name: name, near: index, in: lines)
-      )
-      results.append(function)
-    }
-    return results
-  }
-
-  private static func isTest(name: String, near index: Int, in lines: [String]) -> Bool {
-    name.lowercased().hasPrefix("test") || hasTestAttribute(near: index, in: lines)
-  }
-
-  private static func hasTestAttribute(near index: Int, in lines: [String]) -> Bool {
-    var lookback = index - 1
-    var scanned = 0
-    while lookback >= 0, scanned < 5 {
-      let previous = lines[lookback].trimmingCharacters(in: .whitespaces)
-      if previous.isEmpty {
-        lookback -= 1
-        scanned += 1
-        continue
-      }
-      if previous.contains("@Test") { return true }
-      if previous.hasPrefix("func ") || previous.hasSuffix("{") || previous.hasSuffix("}") {
-        return false
-      }
-      lookback -= 1
-      scanned += 1
-    }
-    return false
-  }
-
-  private static func functionName(in line: String) -> String? {
-    guard let range = line.range(of: "func ") else { return nil }
-    let after = line[range.upperBound...]
-    let name = after.prefix(while: { $0.isLetter || $0.isNumber || $0 == "_" })
-    return name.isEmpty ? nil : String(name)
   }
 }

@@ -3,7 +3,7 @@ import Foundation
 import RegressionGuardKit
 
 @main
-struct RegressionGuardCommand: ParsableCommand {
+struct RegressionGuardCommand: AsyncParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "regression-guard",
     abstract: "Catches shortcuts around failing tests instead of fixing them.",
@@ -12,7 +12,7 @@ struct RegressionGuardCommand: ParsableCommand {
   )
 }
 
-struct Check: ParsableCommand {
+struct Check: AsyncParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "check",
     abstract: "Diff two refs or compare a ref against the working tree."
@@ -36,13 +36,13 @@ struct Check: ParsableCommand {
   @Option(name: .long, help: "Fail at or above this severity: info, warning, error.")
   var failOn: String = "error"
 
-  func run() throws {
+  func run() async throws {
     guard let threshold = Severity(rawValue: failOn) else {
       throw ValidationError("--fail-on must be one of: info, warning, error")
     }
 
     let runner = RegressionGuardRunner(repositoryDirectory: URL(fileURLWithPath: path))
-    let result = try runner.evaluate(base: base, head: head)
+    let result = try await runner.evaluate(base: base, head: head)
     let violations = result.violations
     Self.reportEvidenceGaps(result.syntacticEvidenceGaps)
     let hasBlockingFinding = violations.contains { $0.severity >= threshold }

@@ -41,12 +41,12 @@ public struct RuleEngine {
   }
 
   /// Compatibility entry point for callers that only have parsed file diffs.
-  public func run(diff: [FileDiff], context: RuleContext) -> [Violation] {
-    evaluate(diff: diff, context: context).violations
+  public func run(diff: [FileDiff], context: RuleContext) async -> [Violation] {
+    await evaluate(diff: diff, context: context).violations
   }
 
   /// Entry point for callers that only have parsed file diffs and want the evidence gaps too.
-  public func evaluate(diff: [FileDiff], context: RuleContext) -> Result {
+  public func evaluate(diff: [FileDiff], context: RuleContext) async -> Result {
     let evidence = EvidenceBundle(
       fileDiffs: diff,
       commit: CommitEvidence(
@@ -55,16 +55,16 @@ public struct RuleEngine {
         messages: context.commitMessages
       )
     )
-    return evaluate(evidence: evidence, context: context)
+    return await evaluate(evidence: evidence, context: context)
   }
 
   /// Evaluates every enabled rule against one canonical evidence bundle.
-  public func run(evidence: EvidenceBundle, context: RuleContext) -> [Violation] {
-    evaluate(evidence: evidence, context: context).violations
+  public func run(evidence: EvidenceBundle, context: RuleContext) async -> [Violation] {
+    await evaluate(evidence: evidence, context: context).violations
   }
 
   /// Evaluates every enabled rule, resolving the syntactic evidence they declared they need.
-  public func evaluate(evidence: EvidenceBundle, context: RuleContext) -> Result {
+  public func evaluate(evidence: EvidenceBundle, context: RuleContext) async -> Result {
     guard !context.isApproved else { return Result(violations: []) }
 
     let enabled = enabledRules(context: context)
@@ -74,7 +74,7 @@ public struct RuleEngine {
 
     for (rule, settings) in enabled {
       let evidenceForRule = type(of: rule).inspectsIgnoredPaths ? resolved : visibleEvidence
-      var findings = rule.evaluate(evidence: evidenceForRule, context: context)
+      var findings = await rule.evaluate(evidence: evidenceForRule, context: context)
       for index in findings.indices {
         findings[index].severity = settings.severity
       }

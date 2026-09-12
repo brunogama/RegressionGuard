@@ -153,18 +153,25 @@ public protocol Rule {
   /// `true` when this rule reads parsed syntax. A rule never parses for itself: it declares the
   /// need here, and the engine resolves every declared file in one batched call before evaluating.
   static var requiresSyntacticEvidence: Bool { get }
-  func evaluate(evidence: EvidenceBundle, context: RuleContext) -> [Violation]
+  /// Both entry points are `async` only so that a rule may read the repository actor while it
+  /// evaluates. A rule that needs nothing beyond the bundle satisfies these with an ordinary
+  /// synchronous body, which is what most of them do.
+  func evaluate(evidence: EvidenceBundle, context: RuleContext) async -> [Violation]
   /// - Returns: violations found in `fileDiff`. Do not filter by config `enabled` here -
   ///   the engine does that before calling `evaluate`.
-  func evaluate(fileDiff: FileDiff, context: RuleContext) -> [Violation]
+  func evaluate(fileDiff: FileDiff, context: RuleContext) async -> [Violation]
   /// - Returns: the files this rule wants parsed out of `fileDiff`. Override to narrow further
   ///   than "every Swift file I can see".
   func syntacticEvidenceRequests(for fileDiff: FileDiff) -> [SyntacticEvidenceRequest]
 }
 
 public extension Rule {
-  func evaluate(evidence: EvidenceBundle, context: RuleContext) -> [Violation] {
-    evidence.fileDiffs.flatMap { evaluate(fileDiff: $0, context: context) }
+  func evaluate(evidence: EvidenceBundle, context: RuleContext) async -> [Violation] {
+    var violations: [Violation] = []
+    for fileDiff in evidence.fileDiffs {
+      violations += await evaluate(fileDiff: fileDiff, context: context)
+    }
+    return violations
   }
 
   func syntacticEvidenceRequests(for fileDiff: FileDiff) -> [SyntacticEvidenceRequest] {

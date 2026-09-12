@@ -64,7 +64,7 @@ struct ShortcutRegressionRuleTests {
     )
   }
   @Test("legacy production configuration disables split detectors")
-  func legacyProductionConfigurationDisablesSplitDetectors() {
+  func legacyProductionConfigurationDisablesSplitDetectors() async {
     let configuration = Configuration(
       rules: [ProductionCodeDeletionRule.ruleID: RuleSettings(enabled: false)]
     )
@@ -73,7 +73,7 @@ struct ShortcutRegressionRuleTests {
       added: ["    let value = maybeValue!"]
     )
 
-    let findings = RuleEngine().run(
+    let findings = await RuleEngine().run(
       diff: [diff],
       context: TestSupport.context(configuration: configuration)
     )
@@ -86,7 +86,7 @@ struct ShortcutRegressionRuleTests {
     )
   }
   @Test("ignored changed paths produce a review-escape finding")
-  func ignoredChangedPathsProduceReviewEscapeFinding() {
+  func ignoredChangedPathsProduceReviewEscapeFinding() async {
     let configuration = Configuration(ignore: ["Hidden/**"])
 
     let diff = TestSupport.fileDiff(
@@ -94,7 +94,7 @@ struct ShortcutRegressionRuleTests {
       added: ["func validate() {}"]
     )
 
-    let findings = RuleEngine().run(
+    let findings = await RuleEngine().run(
       diff: [diff],
       context: TestSupport.context(configuration: configuration)
     )

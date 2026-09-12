@@ -59,17 +59,17 @@ private struct LineOnlyRule: Rule {
 @Suite("Syntactic evidence wiring tests")
 struct SyntacticEvidenceEngineTests {
   @Test("a rule that declares no need for trees causes no parsing")
-  func lineOnlyRuleRequestsNothing() {
+  func lineOnlyRuleRequestsNothing() async {
     let provider = RecordingProvider()
     let engine = RuleEngine(rules: [LineOnlyRule()], syntacticEvidenceProvider: provider)
 
-    _ = engine.evaluate(evidence: Self.bundle(), context: TestSupport.context())
+    _ = await engine.evaluate(evidence: Self.bundle(), context: TestSupport.context())
 
     #expect(provider.callCount == 0)
   }
 
   @Test("every requested file is fetched in a single batched call")
-  func requestsAreBatchedIntoOneCall() {
+  func requestsAreBatchedIntoOneCall() async {
     let provider = RecordingProvider()
     let engine = RuleEngine(
       rules: [SyntaxDemandingRule(), SyntaxDemandingRule()],
@@ -79,14 +79,14 @@ struct SyntacticEvidenceEngineTests {
       paths: ["Sources/A.swift", "Sources/B.swift", "README.md"]
     )
 
-    _ = engine.evaluate(evidence: bundle, context: TestSupport.context())
+    _ = await engine.evaluate(evidence: bundle, context: TestSupport.context())
 
     #expect(provider.callCount == 1)
     #expect(provider.requestedPaths == ["Sources/A.swift", "Sources/B.swift"])
   }
 
   @Test("a rule receives the base and head trees resolved for its file")
-  func ruleReceivesResolvedTrees() {
+  func ruleReceivesResolvedTrees() async {
     let provider = RecordingProvider(
       evidence: SyntacticEvidence(
         files: [
@@ -100,7 +100,7 @@ struct SyntacticEvidenceEngineTests {
     )
     let engine = RuleEngine(rules: [SyntaxDemandingRule()], syntacticEvidenceProvider: provider)
 
-    let result = engine.evaluate(
+    let result = await engine.evaluate(
       evidence: Self.bundle(paths: ["Sources/A.swift"]),
       context: TestSupport.context()
     )
@@ -110,10 +110,10 @@ struct SyntacticEvidenceEngineTests {
   }
 
   @Test("a run without a parser degrades explicitly instead of passing silently")
-  func missingParserDegradesExplicitly() {
+  func missingParserDegradesExplicitly() async {
     let engine = RuleEngine(rules: [SyntaxDemandingRule()], syntacticEvidenceProvider: nil)
 
-    let result = engine.evaluate(
+    let result = await engine.evaluate(
       evidence: Self.bundle(paths: ["Sources/A.swift"]),
       context: TestSupport.context()
     )
@@ -124,7 +124,7 @@ struct SyntacticEvidenceEngineTests {
   }
 
   @Test("an unresolvable base ref is reported as a gap, not an absence")
-  func unreadableBaseRefIsAGap() {
+  func unreadableBaseRefIsAGap() async {
     let provider = RecordingProvider(
       evidence: SyntacticEvidence(
         files: [
@@ -138,7 +138,7 @@ struct SyntacticEvidenceEngineTests {
     )
     let engine = RuleEngine(rules: [SyntaxDemandingRule()], syntacticEvidenceProvider: provider)
 
-    let result = engine.evaluate(
+    let result = await engine.evaluate(
       evidence: Self.bundle(paths: ["Sources/A.swift"]),
       context: TestSupport.context()
     )
@@ -149,7 +149,7 @@ struct SyntacticEvidenceEngineTests {
   }
 
   @Test("a request the provider never answered is a gap, not a pass")
-  func unansweredRequestIsAGap() {
+  func unansweredRequestIsAGap() async {
     let provider = RecordingProvider(
       evidence: SyntacticEvidence(
         files: [
@@ -163,7 +163,7 @@ struct SyntacticEvidenceEngineTests {
     )
     let engine = RuleEngine(rules: [SyntaxDemandingRule()], syntacticEvidenceProvider: provider)
 
-    let result = engine.evaluate(
+    let result = await engine.evaluate(
       evidence: Self.bundle(paths: ["Sources/A.swift", "Sources/B.swift"]),
       context: TestSupport.context()
     )
@@ -176,7 +176,7 @@ struct SyntacticEvidenceEngineTests {
   }
 
   @Test("evidence supplied by the caller is used as-is and nothing is parsed")
-  func preresolvedEvidenceIsNotRefetched() {
+  func preresolvedEvidenceIsNotRefetched() async {
     let provider = RecordingProvider()
     let engine = RuleEngine(rules: [SyntaxDemandingRule()], syntacticEvidenceProvider: provider)
     let bundle = Self.bundle(paths: ["Sources/A.swift"])
@@ -192,18 +192,18 @@ struct SyntacticEvidenceEngineTests {
         )
       )
 
-    let result = engine.evaluate(evidence: bundle, context: TestSupport.context())
+    let result = await engine.evaluate(evidence: bundle, context: TestSupport.context())
 
     #expect(provider.callCount == 0)
     #expect(result.violations.map(\.message) == ["parsed:2"])
   }
 
   @Test("ignored paths are neither parsed nor shown to an ordinary rule")
-  func ignoredPathsAreNotParsed() {
+  func ignoredPathsAreNotParsed() async {
     let provider = RecordingProvider()
     let engine = RuleEngine(rules: [SyntaxDemandingRule()], syntacticEvidenceProvider: provider)
 
-    _ = engine.evaluate(
+    _ = await engine.evaluate(
       evidence: Self.bundle(paths: ["Sources/A.swift", "Generated/B.swift"]),
       context: TestSupport.context()
     )
@@ -212,11 +212,11 @@ struct SyntacticEvidenceEngineTests {
   }
 
   @Test("an approved change parses nothing")
-  func approvedChangeParsesNothing() {
+  func approvedChangeParsesNothing() async {
     let provider = RecordingProvider()
     let engine = RuleEngine(rules: [SyntaxDemandingRule()], syntacticEvidenceProvider: provider)
 
-    let result = engine.evaluate(
+    let result = await engine.evaluate(
       evidence: Self.bundle(paths: ["Sources/A.swift"]),
       context: TestSupport.context(commitMessages: ["fix: regression-guard:approve"])
     )
@@ -248,7 +248,7 @@ struct SyntacticEvidenceEngineTests {
   }
 
   @Test("the default rule set still reports violations through the evidence result")
-  func defaultRuleSetReportsThroughResult() {
+  func defaultRuleSetReportsThroughResult() async {
     let engine = RuleEngine()
     let bundle = EvidenceBundle(
       fileDiffs: [
@@ -261,7 +261,7 @@ struct SyntacticEvidenceEngineTests {
       commit: CommitEvidence(baseRef: "base", headRef: "head", messages: [])
     )
 
-    let result = engine.evaluate(evidence: bundle, context: TestSupport.context())
+    let result = await engine.evaluate(evidence: bundle, context: TestSupport.context())
 
     #expect(result.violations.contains { $0.ruleID == "disabled_or_skipped_test" })
     #expect(result.syntacticEvidenceGaps.isEmpty)

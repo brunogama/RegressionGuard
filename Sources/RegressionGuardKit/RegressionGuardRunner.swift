@@ -20,12 +20,12 @@ public struct RegressionGuardRunner {
   /// - Parameters:
   ///   - base: the ref to compare against, such as `origin/main` or a merge-base SHA.
   ///   - head: the ref to check, or `nil` to check the working tree.
-  public func check(base: String, head: String?) throws -> [Violation] {
-    try evaluate(base: base, head: head).violations
+  public func check(base: String, head: String?) async throws -> [Violation] {
+    try await evaluate(base: base, head: head).violations
   }
 
   /// - Returns: the findings plus any explicit gaps in the evidence they were judged on.
-  public func evaluate(base: String, head: String?) throws -> RuleEngine.Result {
+  public func evaluate(base: String, head: String?) async throws -> RuleEngine.Result {
     let repository = GitRepository(workingDirectory: repositoryDirectory)
     let configuration = ConfigurationLoader().load(fromDirectory: repositoryDirectory)
     let classifier = PathClassifier(
@@ -33,9 +33,9 @@ public struct RegressionGuardRunner {
       ignorePatterns: configuration.ignore
     )
 
-    let rawDiff = try repository.diff(base: base, head: head)
+    let rawDiff = try await repository.diff(base: base, head: head)
     let fileDiffs = GitDiffParser().parse(rawDiff)
-    let messages = try commitMessages(repository: repository, base: base, head: head)
+    let messages = try await commitMessages(repository: repository, base: base, head: head)
     let context = RuleContext(
       configuration: configuration,
       pathClassifier: classifier,
@@ -46,15 +46,15 @@ public struct RegressionGuardRunner {
     )
 
     let engine = RuleEngine(syntacticEvidenceProvider: syntacticEvidenceProvider)
-    return engine.evaluate(diff: fileDiffs, context: context)
+    return await engine.evaluate(diff: fileDiffs, context: context)
   }
 
   private func commitMessages(
     repository: GitRepository,
     base: String,
     head: String?
-  ) throws -> [String] {
+  ) async throws -> [String] {
     guard let head else { return [] }
-    return try repository.commitMessages(base: base, head: head)
+    return try await repository.commitMessages(base: base, head: head)
   }
 }

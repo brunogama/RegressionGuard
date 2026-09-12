@@ -4,18 +4,18 @@ import XCTest
 final class WeakenedAssertionRuleTests: XCTestCase {
   let rule = WeakenedAssertionRule()
 
-  func testFlagsTautologicalReplacement() {
+  func testFlagsTautologicalReplacement() async {
     let diff = TestSupport.fileDiff(
       path: "Tests/FooTests.swift",
       removed: ["    XCTAssertEqual(sut.total, 42)"],
       added: ["    XCTAssertTrue(true)"]
     )
-    let violations = rule.evaluate(fileDiff: diff, context: TestSupport.context())
+    let violations = await rule.evaluate(fileDiff: diff, context: TestSupport.context())
     XCTAssertFalse(violations.isEmpty)
     XCTAssertTrue(violations.contains { $0.message.contains("never fail") })
   }
 
-  func testFlagsNetAssertionRemovalWithoutReplacement() {
+  func testFlagsNetAssertionRemovalWithoutReplacement() async {
     let diff = TestSupport.fileDiff(
       path: "Tests/FooTests.swift",
       removed: [
@@ -24,27 +24,27 @@ final class WeakenedAssertionRuleTests: XCTestCase {
       ],
       added: []
     )
-    let violations = rule.evaluate(fileDiff: diff, context: TestSupport.context())
+    let violations = await rule.evaluate(fileDiff: diff, context: TestSupport.context())
     XCTAssertFalse(violations.isEmpty)
   }
 
-  func testDoesNotFlagAssertionsMovedOneForOne() {
+  func testDoesNotFlagAssertionsMovedOneForOne() async {
     let diff = TestSupport.fileDiff(
       path: "Tests/FooTests.swift",
       removed: ["    XCTAssertEqual(sut.total, 42)"],
       added: ["    XCTAssertEqual(sut.total, 43)"]
     )
-    let violations = rule.evaluate(fileDiff: diff, context: TestSupport.context())
+    let violations = await rule.evaluate(fileDiff: diff, context: TestSupport.context())
     XCTAssertTrue(violations.isEmpty)
   }
 
-  func testIgnoresProductionFiles() {
+  func testIgnoresProductionFiles() async {
     let diff = TestSupport.fileDiff(
       path: "Sources/Foo.swift",
       removed: ["    XCTAssertTrue(true)"],
       added: []
     )
-    let violations = rule.evaluate(fileDiff: diff, context: TestSupport.context())
+    let violations = await rule.evaluate(fileDiff: diff, context: TestSupport.context())
     XCTAssertTrue(violations.isEmpty)
   }
 }

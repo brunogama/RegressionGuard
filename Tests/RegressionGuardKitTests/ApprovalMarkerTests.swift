@@ -4,7 +4,7 @@ import Testing
 @Suite("Approval marker tests")
 struct ApprovalMarkerTests {
   @Test("suppresses findings only with an explicit approval marker")
-  func suppressesFindingsWithApprovalMarker() {
+  func suppressesFindingsWithApprovalMarker() async {
     let diff = TestSupport.fileDiff(
       path: "Tests/ExampleTests.swift",
       added: ["  throw XCTSkip(\"intentionally disabled\")"]
@@ -13,7 +13,7 @@ struct ApprovalMarkerTests {
       commitMessages: ["chore: intentional change\n\nregression-guard:approve bootstrap"]
     )
 
-    let findings = RuleEngine().run(diff: [diff], context: context)
+    let findings = await RuleEngine().run(diff: [diff], context: context)
 
     #expect(findings.isEmpty)
   }

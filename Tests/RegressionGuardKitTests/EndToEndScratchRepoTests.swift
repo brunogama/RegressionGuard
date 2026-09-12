@@ -13,12 +13,12 @@ final class EndToEndScratchRepoTests {
 
   private let repoURL: URL
 
-  init() throws {
+  init() async throws {
     repoURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: repoURL, withIntermediateDirectories: true)
-    try sh(["init", "-q", "-b", "main"])
-    try sh(["config", "user.email", "test@example.com"])
-    try sh(["config", "user.name", "Regression Guard Tests"])
+    try await sh(["init", "-q", "-b", "main"])
+    try await sh(["config", "user.email", "test@example.com"])
+    try await sh(["config", "user.name", "Regression Guard Tests"])
   }
 
   deinit {
@@ -26,8 +26,8 @@ final class EndToEndScratchRepoTests {
   }
 
   @discardableResult
-  private func sh(_ args: [String]) throws -> String {
-    try GitRepository(workingDirectory: repoURL).run(args)
+  private func sh(_ args: [String]) async throws -> String {
+    try await GitRepository(workingDirectory: repoURL).run(args)
   }
 
   private func write(_ contents: String, to relativePath: String) throws {
@@ -40,18 +40,18 @@ final class EndToEndScratchRepoTests {
   }
 
   /// Stages everything, commits it with `message`, and returns the resulting SHA.
-  private func commit(_ message: String) throws -> String {
-    try sh(["add", "."])
-    try sh(["commit", "-q", "-m", message])
-    return try sh(["rev-parse", "HEAD"]).trimmingCharacters(in: .whitespacesAndNewlines)
+  private func commit(_ message: String) async throws -> String {
+    try await sh(["add", "."])
+    try await sh(["commit", "-q", "-m", message])
+    return try await sh(["rev-parse", "HEAD"]).trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
-  private func check(base: String, head: String) throws -> [Violation] {
-    try RegressionGuardRunner(repositoryDirectory: repoURL).check(base: base, head: head)
+  private func check(base: String, head: String) async throws -> [Violation] {
+    try await RegressionGuardRunner(repositoryDirectory: repoURL).check(base: base, head: head)
   }
 
   @Test("catches an agent disabling a test instead of fixing it")
-  func catchesADisabledTest() throws {
+  func catchesADisabledTest() async throws {
     try write(
       """
       import XCTest
@@ -63,7 +63,7 @@ final class EndToEndScratchRepoTests {
       """,
       to: "Tests/MathTests.swift"
     )
-    let base = try commit("Add commutativity test")
+    let base = try await commit("Add commutativity test")
 
     // The "agent" gets stuck fixing `add` and disables the test instead.
     try write(
@@ -77,9 +77,9 @@ final class EndToEndScratchRepoTests {
       """,
       to: "Tests/MathTests.swift"
     )
-    let head = try commit("Fix flaky test")
+    let head = try await commit("Fix flaky test")
 
-    let violations = try check(base: base, head: head)
+    let violations = try await check(base: base, head: head)
 
     #expect(
       violations.contains { $0.ruleID == DisabledOrSkippedTestRule.ruleID },
@@ -88,7 +88,7 @@ final class EndToEndScratchRepoTests {
   }
 
   @Test("catches a renamed test function")
-  func catchesARenamedTestFunction() throws {
+  func catchesARenamedTestFunction() async throws {
     try write(
       """
       import XCTest
@@ -100,7 +100,7 @@ final class EndToEndScratchRepoTests {
       """,
       to: "Tests/MathTests.swift"
     )
-    let base = try commit("Add commutativity test")
+    let base = try await commit("Add commutativity test")
 
     try write(
       """
@@ -113,9 +113,9 @@ final class EndToEndScratchRepoTests {
       """,
       to: "Tests/MathTests.swift"
     )
-    let head = try commit("Rename test function")
+    let head = try await commit("Rename test function")
 
-    let violations = try check(base: base, head: head)
+    let violations = try await check(base: base, head: head)
 
     #expect(
       violations.contains { $0.ruleID == DisabledOrSkippedTestRule.ruleID },
@@ -124,7 +124,7 @@ final class EndToEndScratchRepoTests {
   }
 
   @Test("does not flag a legitimate fix")
-  func doesNotFlagALegitimateFix() throws {
+  func doesNotFlagALegitimateFix() async throws {
     try write(
       """
       import XCTest
@@ -137,13 +137,13 @@ final class EndToEndScratchRepoTests {
       to: "Tests/MathTests.swift"
     )
     try write("func add(_ a: Int, _ b: Int) -> Int { a - b }", to: "Sources/Math.swift")
-    let base = try commit("Add (buggy) add function")
+    let base = try await commit("Add (buggy) add function")
 
     // The real fix: correct the implementation, leave the test untouched.
     try write("func add(_ a: Int, _ b: Int) -> Int { a + b }", to: "Sources/Math.swift")
-    let head = try commit("Fix add() to actually add")
+    let head = try await commit("Fix add() to actually add")
 
-    let violations = try check(base: base, head: head)
+    let violations = try await check(base: base, head: head)
 
     #expect(violations.isEmpty, "expected no violations for a legitimate fix, got: \(violations)")
   }
@@ -152,7 +152,7 @@ final class EndToEndScratchRepoTests {
   /// file's functions by name alone used to trap, so the guard crashed on any test file holding
   /// an overload set instead of reporting on it.
   @Test("survives overloaded function names in a test file")
-  func survivesOverloadedFunctionNames() throws {
+  func survivesOverloadedFunctionNames() async throws {
     try write(
       """
       import XCTest
@@ -167,7 +167,7 @@ final class EndToEndScratchRepoTests {
       """,
       to: "Tests/RuleTests.swift"
     )
-    let base = try commit("Add overloaded helpers")
+    let base = try await commit("Add overloaded helpers")
 
     try write(
       """
@@ -183,9 +183,9 @@ final class EndToEndScratchRepoTests {
       """,
       to: "Tests/RuleTests.swift"
     )
-    let head = try commit("Adjust the second overload's expectation")
+    let head = try await commit("Adjust the second overload's expectation")
 
-    let violations = try check(base: base, head: head)
+    let violations = try await check(base: base, head: head)
 
     #expect(
       !violations.contains { $0.ruleID == DisabledOrSkippedTestRule.ruleID },
@@ -196,7 +196,7 @@ final class EndToEndScratchRepoTests {
   /// A test that shares its name with a plain helper still has to be caught when it loses its
   /// `@Test` attribute: the overload set no longer runs as a test at all.
   @Test("catches lost test identity in an overload set")
-  func catchesLostTestIdentityInAnOverloadSet() throws {
+  func catchesLostTestIdentityInAnOverloadSet() async throws {
     try write(
       """
       import Testing
@@ -208,7 +208,7 @@ final class EndToEndScratchRepoTests {
       """,
       to: "Tests/RuleTests.swift"
     )
-    let base = try commit("Add a test beside a same-named helper")
+    let base = try await commit("Add a test beside a same-named helper")
 
     try write(
       """
@@ -220,9 +220,9 @@ final class EndToEndScratchRepoTests {
       """,
       to: "Tests/RuleTests.swift"
     )
-    let head = try commit("Drop the test attribute")
+    let head = try await commit("Drop the test attribute")
 
-    let violations = try check(base: base, head: head)
+    let violations = try await check(base: base, head: head)
 
     #expect(
       violations.contains { $0.ruleID == DisabledOrSkippedTestRule.ruleID },
@@ -231,17 +231,17 @@ final class EndToEndScratchRepoTests {
   }
 
   @Test("honors the approval marker for characterization drift")
-  func honorsApprovalMarkerForCharacterizationDrift() throws {
+  func honorsApprovalMarkerForCharacterizationDrift() async throws {
     try write("original output", to: "Sources/__GoldenMasters__/testRender.snapshot.txt")
-    let base = try commit("Record baseline")
+    let base = try await commit("Record baseline")
 
     try write(
       "intentionally updated output",
       to: "Sources/__GoldenMasters__/testRender.snapshot.txt"
     )
-    let head = try commit("Update rendering\n\nregression-guard:approve")
+    let head = try await commit("Update rendering\n\nregression-guard:approve")
 
-    let violations = try check(base: base, head: head)
+    let violations = try await check(base: base, head: head)
 
     #expect(
       violations.isEmpty,
