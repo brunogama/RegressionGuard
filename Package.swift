@@ -14,6 +14,11 @@ let package = Package(
     .library(name: "GoldenMaster", targets: ["GoldenMaster"]),
     // The detection engine, usable as a library (e.g. from a custom CLI or plugin).
     .library(name: "RegressionGuardKit", targets: ["RegressionGuardKit"]),
+    // The CI-facing command line tool.
+    .executable(name: "regression-guard", targets: ["regression-guard"]),
+  ],
+  dependencies: [
+    .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0")
   ],
   targets: [
     .target(
@@ -23,6 +28,13 @@ let package = Package(
     .target(
       name: "RegressionGuardKit",
       dependencies: []
+    ),
+    .executableTarget(
+      name: "regression-guard",
+      dependencies: [
+        "RegressionGuardKit",
+        .product(name: "ArgumentParser", package: "swift-argument-parser"),
+      ]
     ),
     .testTarget(
       name: "GoldenMasterTests",

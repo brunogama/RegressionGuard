@@ -66,6 +66,10 @@ jobs:
 
       - name: Test
         run: >
-          swift test --parallel
+          swift test --enable-code-coverage --parallel
           -Xswiftc -warnings-as-errors
           -Xswiftc -strict-concurrency=complete
+
+      - name: Enforce RegressionGuardKit line coverage
+        shell: bash
+        run: ./scripts/coverage-gate.sh

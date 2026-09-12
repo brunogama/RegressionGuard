@@ -1,0 +1,37 @@
+# regression-guard configuration. See https://github.com/ (this repository) for the full guide.
+version: 1
+approvalMarker: "regression-guard:approve"
+
+rules:
+  disabled_or_skipped_test:
+    enabled: true
+    severity: error
+  weakened_assertion:
+    enabled: true
+    severity: error
+  production_code_deletion:
+    enabled: true
+    severity: warning
+  golden_master_drift:
+    enabled: true
+    severity: warning
+  review_escape:
+    enabled: true
+    severity: error
+  enforcement_weakening:
+    enabled: true
+    severity: error
+  coverage_regression:
+    enabled: true
+    severity: error
+
+ignore:
+  - "**/.build/**"
+  - "**/Generated/**"
+  - "**/*.generated.swift"
+
+testPaths:
+  - "Tests/**"
+  - "**/*Tests.swift"
+  - "**/*Test.swift"
+  - "**/*Spec.swift"
