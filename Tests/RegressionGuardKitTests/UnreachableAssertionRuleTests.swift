@@ -120,6 +120,75 @@ struct UnreachableAssertionRuleTests {
     #expect(violations.isEmpty)
   }
 
+  /// swift-syntax nests a condition as `ConditionElementList` -> `ConditionElement` -> literal.
+  /// Reading the branch's direct children finds no literal here and the rule goes quiet.
+  @Test("flags an assertion under a false condition nested in a condition list")
+  func flagsAssertionUnderNestedFalseCondition() async {
+    let violations = await evaluateFile(
+      head: [
+        SyntaxFixture.function(
+          "answers",
+          lines: 4...9,
+          body: [
+            SyntaxNode(
+              kind: .ifExpr,
+              span: LineSpan(start: 5, end: 8),
+              children: [
+                SyntaxNode(
+                  kind: .codeBlockItemList,
+                  span: LineSpan(line: 5),
+                  children: [
+                    SyntaxNode(kind: .booleanLiteralExpr, span: LineSpan(line: 5), name: "false")
+                  ]
+                ),
+                SyntaxNode(
+                  kind: .codeBlock,
+                  span: LineSpan(start: 5, end: 8),
+                  children: [Self.assertion(line: 6)]
+                ),
+              ]
+            )
+          ]
+        )
+      ],
+      lines: [DiffLine(kind: .added, number: 5, text: "    if false {")]
+    )
+
+    #expect(violations.count == 1)
+    #expect(violations.first?.line == 6)
+  }
+
+  /// The `else` of an `if false` is the one branch that always runs.
+  @Test("does not flag an assertion in the else of a false condition")
+  func ignoresElseBranchOfFalseCondition() async {
+    let violations = await evaluateFile(
+      head: [
+        SyntaxFixture.function(
+          "answers",
+          lines: 4...11,
+          body: [
+            SyntaxNode(
+              kind: .ifExpr,
+              span: LineSpan(start: 5, end: 10),
+              children: [
+                SyntaxNode(kind: .booleanLiteralExpr, span: LineSpan(line: 5), name: "false"),
+                SyntaxNode(kind: .codeBlock, span: LineSpan(start: 5, end: 7)),
+                SyntaxNode(
+                  kind: .codeBlock,
+                  span: LineSpan(start: 8, end: 10),
+                  children: [Self.assertion(line: 9)]
+                ),
+              ]
+            )
+          ]
+        )
+      ],
+      lines: [DiffLine(kind: .added, number: 5, text: "    if false {")]
+    )
+
+    #expect(violations.isEmpty)
+  }
+
   @Test("does not flag an assertion under an ordinary condition")
   func ignoresOrdinaryCondition() async {
     let violations = await evaluateFile(

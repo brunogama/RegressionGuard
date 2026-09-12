@@ -108,6 +108,23 @@ struct KnownIssueSuppressionRuleTests {
     #expect(violations.isEmpty)
   }
 
+  @Test("flags the module-qualified spelling of the same call")
+  func flagsQualifiedSpelling() async {
+    let qualified = SyntaxNode(
+      kind: .functionCallExpr,
+      span: LineSpan(start: 5, end: 7),
+      name: "Testing.withKnownIssue",
+      children: [SyntaxNode(kind: .closureExpr, span: LineSpan(start: 5, end: 7))]
+    )
+    let violations = await evaluateFile(
+      base: [SyntaxFixture.function("answers", lines: 4...8)],
+      head: [SyntaxFixture.function("answers", lines: 4...8, body: [qualified])],
+      lines: [DiffLine(kind: .added, number: 5, text: "    Testing.withKnownIssue {")]
+    )
+
+    #expect(violations.count == 1)
+  }
+
   @Test("does not flag a call whose name merely starts the same way")
   func ignoresSimilarlyNamedCall() async {
     let violations = await evaluateFile(

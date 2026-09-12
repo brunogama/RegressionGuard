@@ -86,12 +86,21 @@ public struct UnreachableAssertionRule: SyntaxAwareRule {
 
   private static func assertionsUnderFalseCondition(in tree: SyntaxTree) -> [Stranded] {
     tree.nodes(ofKind: .ifExpr).flatMap { branch -> [Stranded] in
-      guard
-        branch.children.contains(where: {
-          $0.kind == .booleanLiteralExpr && $0.name == "false"
-        })
+      // The condition is everything before the first block, searched through its whole subtree:
+      // swift-syntax nests a condition as `ConditionElementList` -> `ConditionElement` -> the
+      // expression, so reading the branch's direct children would find no literal under a
+      // faithful projection and switch this half of the rule off without a test going red.
+      let children = branch.children
+      let bodyIndex = children.firstIndex { blockKinds.contains($0.kind) } ?? children.endIndex
+      let condition = children[children.startIndex..<bodyIndex]
+      guard condition.contains(where: { $0.containsNode(ofAnyKind: [.booleanLiteralExpr]) }),
+        condition.contains(where: { isFalseLiteral(in: $0) })
       else { return [] }
-      return branch.selfAndDescendants.filter(AssertionCall.isAssertion).map {
+
+      // Only the then-block. The `else` of an `if false` is the one branch that always runs, so
+      // sweeping the whole subtree would flag the only reachable code in it.
+      guard bodyIndex < children.endIndex else { return [] }
+      return children[bodyIndex].selfAndDescendants.filter(AssertionCall.isAssertion).map {
         Stranded(
           assertion: $0,
           cause: branch,
@@ -99,6 +108,16 @@ public struct UnreachableAssertionRule: SyntaxAwareRule {
         )
       }
     }
+  }
+
+  /// Whether `node`'s subtree holds a `false` literal.
+  ///
+  /// Reads the spelling off `name`, which is the only carrier the projection has for it. A
+  /// projector that leaves a literal's `name` nil makes `if false` and `if true` indistinguishable
+  /// here, and this detection finds nothing - recorded as the one projection obligation the rule
+  /// could not absorb.
+  private static func isFalseLiteral(in node: SyntaxNode) -> Bool {
+    node.selfAndDescendants.contains { $0.kind == .booleanLiteralExpr && $0.name == "false" }
   }
 
   private static func assertionsAfterExit(in tree: SyntaxTree) -> [Stranded] {

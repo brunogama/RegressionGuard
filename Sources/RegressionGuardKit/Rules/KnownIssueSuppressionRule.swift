@@ -72,7 +72,10 @@ public struct KnownIssueSuppressionRule: SyntaxAwareRule {
 
   private static func suppressions(in tree: SyntaxTree) -> [SyntaxNode] {
     tree.nodes(ofAnyKind: [.functionCallExpr, .macroExpansionExpr]).filter { node in
-      node.name.map(suppressingCalls.contains) ?? false
+      // The trailing component, so a module-qualified `Testing.withKnownIssue` is the same call.
+      // Still not a prefix match: `withKnownIssueTracker` is somebody's helper, not this.
+      guard let name = node.name else { return false }
+      return suppressingCalls.contains(String(name.split(separator: ".").last ?? ""))
     }
   }
 

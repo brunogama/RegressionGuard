@@ -125,6 +125,72 @@ struct ImplementationStubbedRuleTests {
     #expect(violations.isEmpty)
   }
 
+  /// A bare name is shared across every type in a file. Keyed by name alone, an unrelated
+  /// `Cache.reset` that always trapped would excuse a genuine stub of `Session.reset`.
+  @Test("flags a stub even when another type has a same-named function that always trapped")
+  func flagsStubDespiteSameNamedTrapElsewhere() async {
+    let cache = SyntaxNode(
+      kind: .structDecl,
+      span: LineSpan(start: 20, end: 24),
+      name: "Cache",
+      children: [
+        SyntaxFixture.function(
+          "reset",
+          lines: 21...23,
+          body: [SyntaxFixture.call("fatalError", line: 22)]
+        )
+      ]
+    )
+    let session = { (body: [SyntaxNode], lines: ClosedRange<Int>) in
+      SyntaxNode(
+        kind: .structDecl,
+        span: LineSpan(start: 3, end: lines.upperBound + 1),
+        name: "Session",
+        children: [SyntaxFixture.function("reset", lines: lines, body: body)]
+      )
+    }
+    let violations = await evaluateFile(
+      base: [session(Self.realBody(lines: 5...7), 4...8), cache],
+      head: [session([SyntaxFixture.call("fatalError", line: 5)], 4...6), cache],
+      lines: [DiffLine(kind: .added, number: 5, text: "    fatalError(\"unimplemented\")")]
+    )
+
+    #expect(violations.count == 1)
+  }
+
+  /// The mirror case: adding a new type whose trap shares a name with an implemented function
+  /// elsewhere must not read as that function being stubbed.
+  @Test("does not flag a new type's trap that shares a name with an implemented function")
+  func ignoresNewTypeTrapSharingAName() async {
+    let existing = SyntaxNode(
+      kind: .structDecl,
+      span: LineSpan(start: 3, end: 9),
+      name: "Session",
+      children: [SyntaxFixture.function("encode", lines: 4...8, body: Self.realBody(lines: 5...7))]
+    )
+    let violations = await evaluateFile(
+      base: [existing],
+      head: [
+        existing,
+        SyntaxNode(
+          kind: .structDecl,
+          span: LineSpan(start: 20, end: 24),
+          name: "Draft",
+          children: [
+            SyntaxFixture.function(
+              "encode",
+              lines: 21...23,
+              body: [SyntaxFixture.call("fatalError", line: 22)]
+            )
+          ]
+        ),
+      ],
+      lines: [DiffLine(kind: .added, number: 22, text: "    fatalError(\"unimplemented\")")]
+    )
+
+    #expect(violations.isEmpty)
+  }
+
   @Test("does not flag a body that still returns a computed value")
   func ignoresComputedReturn() async {
     let violations = await evaluateFile(

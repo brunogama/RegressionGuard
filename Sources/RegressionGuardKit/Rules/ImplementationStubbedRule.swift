@@ -57,15 +57,16 @@ public struct ImplementationStubbedRule: SyntaxAwareRule {
     let severity = Self.settings(from: context).severity
     let map = fileDiff.changedLineMap
 
-    // An overload set shares a name, so a name is only treated as previously implemented when no
-    // member of the set was already a stub. That keeps a set containing one honest trap from
-    // making every sibling look newly stubbed.
-    let wasImplemented = Self.implementationStateByName(in: base)
+    // Keyed by the enclosing type, not by bare name. A bare name is shared across every type in
+    // a file, so `A.reset` being stubbed would be excused by an unrelated `B.reset` that always
+    // trapped, and a brand-new type's honest trap would be blamed on a same-named function
+    // somewhere else.
+    let wasImplemented = Self.implementationStateByQualifiedName(in: base)
 
-    return head.nodes(ofKind: .functionDecl)
+    return Self.declarations(in: head)
       .filter { map.touches($0.span, at: .head) }
       .filter { Self.isStubbed($0) }
-      .filter { $0.name.flatMap { wasImplemented[$0] } == true }
+      .filter { wasImplemented[Self.qualifiedName(of: $0, in: head)] == true }
       .map { function in
         Violation(
           ruleID: Self.ruleID,
@@ -79,14 +80,38 @@ public struct ImplementationStubbedRule: SyntaxAwareRule {
       }
   }
 
-  /// Which names had a body doing real work, keyed by function name.
-  private static func implementationStateByName(in tree: SyntaxTree) -> [String: Bool] {
+  /// Declarations that carry a body worth calling stubbed.
+  ///
+  /// Initialisers as well as functions: `required init?(coder:)` is the resolution's own example
+  /// of a benign trap, so an initialiser whose real body was replaced is squarely in scope.
+  private static let declarationKinds: Set<SyntaxNodeKind> = [.functionDecl, .initializerDecl]
+
+  private static func declarations(in tree: SyntaxTree) -> [SyntaxNode] {
+    tree.nodes(ofAnyKind: declarationKinds)
+  }
+
+  /// Which declarations had a body doing real work, keyed by enclosing type and name.
+  ///
+  /// An overload set still shares one key, so a set keeps its implemented standing while any
+  /// member of it does real work. That is the narrow case the qualification cannot separate, and
+  /// it errs towards reporting rather than towards silence.
+  private static func implementationStateByQualifiedName(in tree: SyntaxTree) -> [String: Bool] {
     Dictionary(
-      tree.nodes(ofKind: .functionDecl).compactMap { function in
-        function.name.map { ($0, !isStubbed(function)) }
-      },
-      uniquingKeysWith: { $0 && $1 }
+      declarations(in: tree).map { (qualifiedName(of: $0, in: tree), !isStubbed($0)) },
+      uniquingKeysWith: { $0 || $1 }
     )
+  }
+
+  /// `Type.name` where an enclosing type can be found, and the bare name otherwise.
+  private static func qualifiedName(of declaration: SyntaxNode, in tree: SyntaxTree) -> String {
+    let name = declaration.name ?? "init"
+    let containers: [SyntaxNodeKind] = [
+      .structDecl, .classDecl, .enumDecl, .actorDecl, .extensionDecl,
+    ]
+    let owner = containers.lazy
+      .compactMap { tree.innermostNode(ofKind: $0, containing: declaration.span)?.name }
+      .first
+    return owner.map { $0 + "." + name } ?? name
   }
 
   /// - Returns: `true` when the body is a single trap or a single constant return.
