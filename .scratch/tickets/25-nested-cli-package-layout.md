@@ -68,17 +68,25 @@ dependencies do not reach consumers of the root.
 supply it. Two answers, and this ticket does not pick one:
 
 1. **Keep the plugin in the root, pointed at a `binaryTarget`.** `scripts/build-artifactbundle.py`
-   already produces the artifact - universal, 8.0 MiB zipped, verified to run. The cost is that a
-   binary artifact is very likely materialised at resolve time whether or not the plugin is used,
-   which would mean 8 MiB for every consumer instead of zero. **Unverified:** SwiftPM rejects
-   non-`https` URLs for binary targets, so this could not be measured locally. Settle it against a
-   real release before choosing.
-2. **Move the plugin into the CLI package.** Zero consumer cost, but `swift package
-   regression-guard` stops working for anyone who has not added that package - a documented feature
-   in `README.md` regressing.
+   already produces the artifact - universal, 8.0 MiB zipped, verified to run. Binary artifacts are
+   downloaded **eagerly**, now measured rather than assumed: a consumer package using only an
+   unrelated library target still downloaded a 72 MiB artifact bundle in full before building. So
+   this costs every consumer the 8 MiB, not only the ones who run the plugin.
+2. **Move the plugin into the CLI package.** Zero consumer cost, but this does not merely make the
+   plugin opt-in - it removes it. A nested package is not addressable by URL, because SwiftPM
+   resolves a package from a repository root, so a consumer cannot depend on `CLI/` at all. The
+   plugin would be reachable only by cloning this repository.
 
-If (1) turns out to download for everyone, the choice is 8 MiB for all consumers against removing a
-feature, and that is a product decision rather than a technical one.
+So the real trade is 8 MiB on every consumer against deleting a documented feature for all of them,
+which is a product decision rather than a technical one. Note that (1) still beats today on every
+axis - 8 MiB downloaded against 80,542 objects fetched and 13.5 MiB of checkouts - and matches the
+ecosystem norm; SwiftLint ships its plugin exactly this way, which is what the measurement above
+was taken against.
+
+A third architecture escapes the trade entirely and should be weighed before either: **put the CLI
+in its own repository** rather than nesting it. Consumers of the libraries then pay literally
+nothing, the CLI package stays addressable by URL so the plugin survives and stays opt-in, and
+`Vendor/` leaves this repository with it. The cost is two repositories to release in step.
 
 ## Migration steps
 
@@ -94,9 +102,13 @@ feature, and that is a product decision rather than a technical one.
    it asserts on). `EndToEndScratchRepoTests` sounds like a third and is not - it drives
    `RegressionGuardRunner` through `@testable import RegressionGuardKit` and spawns nothing, so it
    stays with the root package.
-5. Move `Vendor/` and the offline manifest into the CLI package, or leave `Vendor/` at the root and
-   reference it as `../Vendor/...` from the CLI manifest. The second keeps one vendoring location
-   for a repository that may later vendor something for the root; decide when implementing.
+5. Move `Vendor/` and the offline manifest into the CLI package. Only the CLI has dependencies, so
+   only the CLI vendors anything, and the root package having none is the point of this layout
+   rather than a temporary state - keeping a shared `Vendor/` at the root would be reserving a
+   place for a need the design says will not arise. Note this does not change what consumers
+   download either way: git clones the whole repository, so the 3.2 MiB of bare repositories ships
+   to every consumer regardless of which directory holds it. Only moving the CLI to its own
+   repository removes that.
 6. Update `scripts/prepare-offline-validation.py`, `scripts/build-artifactbundle.py`, the `Justfile`
    recipes, `ci.yml`, and `regression-guard-self-check.yml` for two package roots.
 7. Update `README.md`: the install promise, the repository layout section, and the plugin section
