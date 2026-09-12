@@ -86,3 +86,20 @@ adds the layer that tells them when they are describing a tree that never occurs
 family's whole suite to parsed fixtures would cost the edge cases that are only expressible by
 construction - a degraded side, a projector that emits one shape rather than another - and those are
 exactly what the hand-built fixtures are for.
+
+## Amendment: the sweep covers every tree-reading family
+
+The prototype ran four families and this now runs all six: `disabled_or_skipped_test`,
+`behavior_deletion` and `error_handling_collapse` joined the parameterised case once the shipping
+provider landed and there was a real run to point them at.
+
+All three fire on parsed source, and each case asserts `.syntax` rather than only that something was
+reported. That distinction is what makes the sweep meaningful for the families that do have a text
+fallback: unlike the AST-only three, a projection they cannot read does not leave them silent - it
+drops them back to the matchers the tree was supposed to replace, which reports something and looks
+like a pass.
+
+The three needed no fixes, which is the useful negative result: the defects the prototype found were
+projection shapes, and once `functionCallExpr` carried its callee and `statements` unwrapped both
+wrappers, the families that depend on those shapes - `XCTSkip` recognised as a call, a block's
+statements counted as statements - were correct as written.

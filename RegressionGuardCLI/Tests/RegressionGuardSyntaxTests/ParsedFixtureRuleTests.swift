@@ -99,20 +99,27 @@ final class ParsedFixtureRuleTests {
     #expect(!result.violations.contains { $0.ruleID == "weakened_assertion" })
   }
 
-  /// The three families that exist only on the tree, each against source a parser really produced.
+  /// Every family that reads a tree, each against source a parser really produced.
   ///
-  /// They are grouped because they share one failure mode and it is the reason this suite exists:
-  /// none of them has a text fallback, so a detection that does not survive the real projection
-  /// does not degrade - it reports nothing, anywhere, and the hand-built fixtures still pass.
+  /// Grouped because they share one failure mode, and it is the reason this suite exists: a
+  /// detection that does not survive the real projection does not fail, it goes quiet, and the
+  /// hand-built fixtures still pass. The three AST-only families - `known_issue_suppression`,
+  /// `implementation_stubbed`, `unreachable_assertion` - have no text fallback at all, so for them
+  /// quiet means nothing is found anywhere; the other three would silently fall back to the
+  /// matchers the tree was supposed to replace, which is why each case asserts `.syntax` rather
+  /// than only that something was reported.
   @Test(
-    "the AST-only families fire on parsed source",
+    "every tree-reading family fires on parsed source",
     arguments: [
       Self.knownIssueSuppression,
       Self.stubbedImplementation,
       Self.strandedAssertion,
+      Self.skippedTest,
+      Self.deletedBranches,
+      Self.discardedError,
     ]
   )
-  func astOnlyFamiliesFireOnParsedSource(expectation: RuleExpectation) async throws {
+  func everyFamilyFiresOnParsedSource(expectation: RuleExpectation) async throws {
     let result = try await evaluate(expectation.pair)
 
     let violation = try #require(
@@ -226,6 +233,96 @@ final class ParsedFixtureRuleTests {
             if false {
               XCTAssertEqual(sut.total, 42)
             }
+          }
+        }
+
+        """
+    )
+  )
+
+  /// An agent switches a failing test off with a trait rather than fixing what it caught.
+  ///
+  /// Written as `@Test(.disabled)` because that is the shape with no line-path equivalent: the
+  /// trait is a node inside the attribute, and the text matcher has no concept of a whole suite or
+  /// a trait spread over several lines.
+  private static let skippedTest = RuleExpectation(
+    ruleID: "disabled_or_skipped_test",
+    pair: SourcePair(
+      path: "Tests/TotalTests.swift",
+      base: """
+        import Testing
+
+        struct TotalTests {
+          @Test func total() {
+            #expect(sut.total == 42)
+          }
+        }
+
+        """,
+      head: """
+        import Testing
+
+        struct TotalTests {
+          @Test(.disabled) func total() {
+            #expect(sut.total == 42)
+          }
+        }
+
+        """
+    )
+  )
+
+  /// An agent deletes the branches a production function was built from.
+  ///
+  /// Four removed against one survivor, which clears the rule's threshold of three and is a net
+  /// removal rather than a reformatting.
+  private static let deletedBranches = RuleExpectation(
+    ruleID: "behavior_deletion",
+    pair: SourcePair(
+      path: "Sources/Total.swift",
+      base: """
+        struct Calculator {
+          func total(of values: [Int]) -> Int {
+            guard !values.isEmpty else { return 0 }
+            if values.count == 1 {
+              return values[0]
+            }
+            for value in values where value < 0 {
+              return -1
+            }
+            return values.reduce(0, +)
+          }
+        }
+
+        """,
+      head: """
+        struct Calculator {
+          func total(of values: [Int]) -> Int {
+            return values.reduce(0, +)
+          }
+        }
+
+        """
+    )
+  )
+
+  /// An agent silences a failing call by discarding its error instead of handling it.
+  private static let discardedError = RuleExpectation(
+    ruleID: "error_handling_collapse",
+    pair: SourcePair(
+      path: "Sources/Loader.swift",
+      base: """
+        struct Loader {
+          func load() throws -> Data {
+            try read()
+          }
+        }
+
+        """,
+      head: """
+        struct Loader {
+          func load() -> Data? {
+            try? read()
           }
         }
 
