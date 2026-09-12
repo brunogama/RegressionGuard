@@ -58,6 +58,8 @@ public extension SyntaxNodeKind {
   static let codeBlock = Self("codeBlock")
   /// swift-syntax wraps a block's statements in a list node; a faithful projection may keep it.
   static let codeBlockItemList = Self("codeBlockItemList")
+  /// And wraps each statement in the list in an item of its own, which a projection may also keep.
+  static let codeBlockItem = Self("codeBlockItem")
   static let closureExpr = Self("closureExpr")
   static let functionCallExpr = Self("functionCallExpr")
   static let memberAccessExpr = Self("memberAccessExpr")

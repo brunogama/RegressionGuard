@@ -138,6 +138,24 @@ Find the way to swift-syntax-backed detection in RegressionGuard: syntactic evid
   paid by every consumer because binary artifacts download eagerly whether or not anything uses
   them.
 
+- [Syntactic test fixture strategy](21-syntactic-test-fixture-strategy.md): two layers rather
+  than one. The hand-built `SyntaxFixture` suites stay in the root package, because RegressionGuardKit
+  has no dependencies and its test target cannot be given a parser, and they remain where a rule's
+  reasoning and its degraded cases are pinned; a second suite in the CLI package runs each family
+  against source a parser really produced - a `SourcePair` of two whole file versions committed to a
+  scratch repository, diffed by `git`, projected by `SwiftSyntaxProjection`, and judged by
+  `RegressionGuardRunner` - so no test writes a hunk or a line number by hand. The layer earned
+  itself immediately: three of the four tree-reading families were reporting nothing at all against
+  real source while every fixture passed, because `functionCallExpr` projected unnamed and
+  `SyntaxNode.statements` unwrapped swift-syntax's statement list but not the item wrapping each
+  statement inside it - and the projector test that would have caught the first was titled for the
+  call and asserted the child. The line-based tests are kept and the parserless run gets a case of
+  its own, asserting that the same change is missed and reported as a `parserUnavailable` gap rather
+  than passing clean. Existing suites are not migrated: a fixture built by construction can express a
+  degraded side or a competing projection shape, which source cannot, and source can be misread in
+  the other direction - `return` above an assertion parses as `return assertion`, so the first
+  stranded-assertion fixture was wrong where the rule was right.
+
 ## Not yet specified
 
 - Promotion of advisory AST rule families to blocking, once per-rule false-positive rates exist. Depends on calibration data that cannot be gathered until the rules have shipped and been reviewed.

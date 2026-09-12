@@ -90,6 +90,9 @@ struct SwiftSyntaxProjectionTests {
   func namesCallee() throws {
     let parsed = tree("func f() { XCTAssertTrue(x) }")
     let call = try #require(parsed.firstNode(ofKind: .functionCallExpr))
+    // Asserted on the call, which is what this test always claimed and did not check: it read the
+    // child's name, so it passed while every projected call went unnamed.
+    #expect(call.name == "XCTAssertTrue")
     #expect(call.firstNode(ofKind: .declReferenceExpr)?.name == "XCTAssertTrue")
   }
 

@@ -41,7 +41,11 @@ enum SyntaxNodeName {
     case .declReferenceExpr(let expr):
       return expr.baseName.text
     // A call's callee, so a rule asking what was called does not have to walk into the child that
-    // happens to hold the name.
+    // happens to hold the name. `AssertionCall` reads exactly this: an assertion is recognised by
+    // the name on the call, and without it every `XCTAssert...(...)` in a real file projects as an
+    // unnamed call and the whole tautology detection goes silent.
+    case .functionCallExpr(let expr):
+      return of(Syntax(expr.calledExpression))
     case .memberAccessExpr(let expr):
       return expr.declName.baseName.text
     case .attribute(let attribute):

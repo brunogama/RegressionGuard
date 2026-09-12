@@ -92,6 +92,40 @@ struct ImplementationStubbedRuleTests {
     #expect(violations.count == 1)
   }
 
+  /// The shape the real projector emits: the list, and an item wrapping each statement in it.
+  ///
+  /// The list-only fixture above passed while this one did not exist, and the rule reported
+  /// nothing against every real file - found by running the parser rather than by reading it. Both
+  /// wrappers are kept as tests because either one alone is a shape a projection could produce.
+  @Test("flags a stub whose statements are wrapped in a list and an item")
+  func flagsStubBehindStatementItems() async {
+    let violations = await evaluateFile(
+      base: [SyntaxFixture.function("total", lines: 4...8, body: Self.realBody(lines: 5...7))],
+      head: [
+        SyntaxFixture.function(
+          "total",
+          lines: 4...6,
+          body: [
+            SyntaxNode(
+              kind: .codeBlockItemList,
+              span: LineSpan(line: 5),
+              children: [
+                SyntaxNode(
+                  kind: .codeBlockItem,
+                  span: LineSpan(line: 5),
+                  children: [SyntaxFixture.call("fatalError", line: 5)]
+                )
+              ]
+            )
+          ]
+        )
+      ],
+      lines: [DiffLine(kind: .added, number: 5, text: "    fatalError(\"unimplemented\")")]
+    )
+
+    #expect(violations.count == 1)
+  }
+
   @Test("does not flag a function that already trapped before the change")
   func ignoresPreexistingTrap() async {
     let stub = SyntaxFixture.function(

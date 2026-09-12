@@ -39,13 +39,19 @@ public extension SyntaxNode {
   /// The statements this node holds, in source order, in either projection shape.
   ///
   /// swift-syntax puts a block's statements inside a `CodeBlockItemList` rather than directly
-  /// under the block, and a faithful projection may keep that list as a node of its own. A rule
-  /// reading `children` alone would then see one list where it expected the statements, find no
-  /// `returnStmt` and no trap, and conclude the body was fine - silence, not error, which is the
-  /// failure this projection is most prone to. Both shapes are read, and both are pinned by
-  /// tests.
+  /// under the block, and wraps each one in a `CodeBlockItem` besides. A projection faithful to
+  /// either layer hands back wrappers where a rule expected statements, so the rule finds no
+  /// `returnStmt` and no trap and concludes the body was fine - silence, not error, which is the
+  /// failure this projection is most prone to. Both wrappers are unwrapped here rather than in
+  /// every rule that reads a block, and both shapes are pinned by tests.
+  ///
+  /// The item wrapper was found by running the real projector rather than by reading it: the
+  /// list was absorbed and the item was not, which left `implementation_stubbed` and
+  /// `unreachable_assertion` reporting nothing on real source while their fixtures passed.
   var statements: [Self] {
-    children.flatMap { $0.kind == .codeBlockItemList ? $0.children : [$0] }
+    children
+      .flatMap { $0.kind == .codeBlockItemList ? $0.children : [$0] }
+      .flatMap { $0.kind == .codeBlockItem ? $0.children : [$0] }
   }
 
   /// The statements of this declaration's body, in either projection shape.
