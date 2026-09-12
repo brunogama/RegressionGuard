@@ -148,6 +148,33 @@ struct SyntacticEvidenceEngineTests {
     #expect(result.syntacticEvidenceGaps.first?.detail == "fatal: bad object")
   }
 
+  @Test("a request the provider never answered is a gap, not a pass")
+  func unansweredRequestIsAGap() {
+    let provider = RecordingProvider(
+      evidence: SyntacticEvidence(
+        files: [
+          SyntacticFileEvidence(
+            path: "Sources/A.swift",
+            base: .parsed(Self.tree(path: "Sources/A.swift", ref: "base")),
+            head: .parsed(Self.tree(path: "Sources/A.swift", ref: "head"))
+          )
+        ]
+      )
+    )
+    let engine = RuleEngine(rules: [SyntaxDemandingRule()], syntacticEvidenceProvider: provider)
+
+    let result = engine.evaluate(
+      evidence: Self.bundle(paths: ["Sources/A.swift", "Sources/B.swift"]),
+      context: TestSupport.context()
+    )
+
+    #expect(result.violations.map(\.message) == ["parsed:2", "degraded"])
+    #expect(result.syntacticEvidenceGaps.map(\.path) == ["Sources/B.swift", "Sources/B.swift"])
+    #expect(
+      result.syntacticEvidenceGaps.allSatisfy { $0.reason == .requestUnanswered }
+    )
+  }
+
   @Test("evidence supplied by the caller is used as-is and nothing is parsed")
   func preresolvedEvidenceIsNotRefetched() {
     let provider = RecordingProvider()

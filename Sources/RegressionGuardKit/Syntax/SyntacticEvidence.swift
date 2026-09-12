@@ -29,6 +29,10 @@ public enum SyntaxEvidenceGapReason: String, Codable, CaseIterable, Equatable, H
   case sourceReadFailed
   /// The source was read but could not be decoded as text.
   case sourceNotDecodable
+  /// The provider was asked for this file and returned nothing for it. A dropped request is a
+  /// gap: left unreconciled it would be indistinguishable from a file no rule ever asked about,
+  /// which is the one reading that turns a would-be finding into a pass.
+  case requestUnanswered
 }
 
 /// One explicit, reportable hole in the syntactic evidence for a run.
@@ -138,6 +142,25 @@ public struct SyntacticEvidence: Codable, Equatable, Sendable {
     files.flatMap(\.gaps)
   }
 
+  /// Fills in every request the provider left unanswered, as an explicit gap.
+  ///
+  /// A run only trusts what it can account for. Without this, a provider that quietly dropped a
+  /// file would leave that path missing from `files`, which reads as "no rule asked for it" and
+  /// turns a would-be finding into a pass.
+  public func reconciled(with requests: [SyntacticEvidenceRequest]) -> Self {
+    let unanswered = requests.filter { filesByPath[$0.path] == nil }
+    guard !unanswered.isEmpty else { return self }
+    return Self(
+      files: files
+        + unanswered.map {
+          $0.unavailableEvidence(
+            reason: .requestUnanswered,
+            detail: "The syntactic evidence provider returned no result for this file."
+          )
+        }
+    )
+  }
+
   public func retainingPaths(_ paths: Set<String>) -> Self {
     Self(files: files.filter { paths.contains($0.path) })
   }
@@ -164,6 +187,21 @@ public struct SyntacticEvidenceRequest: Codable, Equatable, Hashable, Sendable {
       path: fileDiff.displayPath,
       basePath: fileDiff.isAdded ? nil : fileDiff.oldPath,
       headPath: fileDiff.isDeleted ? nil : fileDiff.newPath
+    )
+  }
+
+  /// Evidence for this request with no tree on either side that was expected to have one.
+  ///
+  /// The sides the request already expected to be empty stay absences, so a gap is only ever
+  /// claimed for source that should have existed.
+  func unavailableEvidence(
+    reason: SyntaxEvidenceGapReason,
+    detail: String?
+  ) -> SyntacticFileEvidence {
+    SyntacticFileEvidence(
+      path: path,
+      base: basePath == nil ? .absent(.fileAdded) : .unavailable(reason, detail: detail),
+      head: headPath == nil ? .absent(.fileDeleted) : .unavailable(reason, detail: detail)
     )
   }
 }
@@ -193,15 +231,10 @@ public struct UnavailableSyntacticEvidenceProvider: SyntacticEvidenceProvider {
 
   public func syntacticEvidence(for requests: [SyntacticEvidenceRequest]) -> SyntacticEvidence {
     SyntacticEvidence(
-      files: requests.map { request in
-        SyntacticFileEvidence(
-          path: request.path,
-          base: request.basePath == nil
-            ? .absent(.fileAdded)
-            : .unavailable(.parserUnavailable, detail: "No Swift parser was supplied to this run."),
-          head: request.headPath == nil
-            ? .absent(.fileDeleted)
-            : .unavailable(.parserUnavailable, detail: "No Swift parser was supplied to this run.")
+      files: requests.map {
+        $0.unavailableEvidence(
+          reason: .parserUnavailable,
+          detail: "No Swift parser was supplied to this run."
         )
       }
     )

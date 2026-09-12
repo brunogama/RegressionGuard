@@ -123,7 +123,8 @@ public struct RuleEngine {
     guard !requests.isEmpty else { return evidence }
 
     let provider = syntacticEvidenceProvider ?? UnavailableSyntacticEvidenceProvider()
-    return evidence.withSyntacticEvidence(provider.syntacticEvidence(for: requests))
+    let resolved = provider.syntacticEvidence(for: requests)
+    return evidence.withSyntacticEvidence(resolved.reconciled(with: requests))
   }
 
   private func configuredSettings(
