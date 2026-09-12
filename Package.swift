@@ -16,6 +16,10 @@ let package = Package(
     .library(name: "RegressionGuardKit", targets: ["RegressionGuardKit"]),
     // The CI-facing command line tool.
     .executable(name: "regression-guard", targets: ["regression-guard"]),
+    .executable(
+      name: "regression-guard-observer",
+      targets: ["regression-guard-observer"]
+    ),
   ],
   dependencies: [
     .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0")
@@ -36,6 +40,19 @@ let package = Package(
         .product(name: "ArgumentParser", package: "swift-argument-parser"),
       ]
     ),
+    .target(
+      name: "RegressionGuardObserver",
+      dependencies: ["RegressionGuardKit"],
+      path: "Sources/RegressionGuard/Observer"
+    ),
+    .executableTarget(
+      name: "regression-guard-observer",
+      dependencies: [
+        "RegressionGuardObserver",
+        .product(name: "ArgumentParser", package: "swift-argument-parser"),
+      ],
+      path: "Sources/RegressionGuard/ObserverCLI"
+    ),
     .testTarget(
       name: "GoldenMasterTests",
       dependencies: ["GoldenMaster"],
@@ -44,6 +61,13 @@ let package = Package(
     .testTarget(
       name: "RegressionGuardKitTests",
       dependencies: ["RegressionGuardKit"]
+    ),
+    .testTarget(
+      name: "RegressionGuardObserverTests",
+      dependencies: [
+        "RegressionGuardKit",
+        "RegressionGuardObserver",
+      ]
     ),
   ],
   swiftLanguageModes: [.v6]
