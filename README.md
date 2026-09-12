@@ -283,8 +283,13 @@ wrapper around `RegressionGuardRunner`.
 
 ## Known limitations (v1)
 
-- Detection is diff/regex/heuristic-based, not a full Swift AST analysis (no SwiftSyntax
-  dependency, so no toolchain-version coupling) — it will miss cleverly disguised cheating and can
+- The Swift rules are written against parsed syntax, but **no parser ships yet**. Until the
+  parsing target lands, every run reports `parserUnavailable` gaps in `syntacticEvidenceGaps`,
+  the migrated rules fall back to their line-based detection and mark those findings
+  `degradedDiff`, and the three AST-only families contribute nothing at all. A degraded run is
+  never a silent pass — it says so — but it is weaker than the rules describe.
+- Detection is syntactic, never semantic. There are no resolved types, no protocol conformances,
+  and no cross-file symbol resolution, so it will miss cleverly disguised cheating and can
   occasionally flag a legitimate refactor. Treat violations as "a human should look at this," not
   as ground truth; the `approvalMarker` escape hatch exists for exactly that reason.
 - `behavior_deletion` and `error_handling_collapse` are the least precise rules by nature (both

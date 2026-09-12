@@ -71,6 +71,8 @@ public extension SyntaxNodeKind {
   static let infixOperatorExpr = Self("infixOperatorExpr")
   static let forceUnwrapExpr = Self("forceUnwrapExpr")
   static let optionalChainingExpr = Self("optionalChainingExpr")
+  /// `try`, `try?`, and `try!` share one kind, so the node's `name` carries the spelling and is
+  /// the only thing that separates propagating an error from discarding it.
   static let tryExpr = Self("tryExpr")
   static let ifExpr = Self("ifExpr")
   static let switchExpr = Self("switchExpr")

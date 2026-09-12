@@ -19,6 +19,12 @@ public struct RuleEngine {
     /// the findings, because a family that found nothing leaves none. Reported so a clean result
     /// can be told from an absent rule.
     public let ruleSeverities: [String: Severity]
+    /// Rules configuration switched off, with the severity they would have reported at.
+    ///
+    /// Reported alongside the enabled ones so a deferred family is visibly deferred. Dropping it
+    /// would make `enabled: false` - the deferral the upgrade note recommends - produce a report
+    /// identical to a guard version that never had the rule.
+    public let disabledRuleSeverities: [String: Severity]
     /// `true` when an approval marker stopped every rule from running.
     ///
     /// Without it an approved run is byte-shaped like a guard that has no rules: no findings, no
@@ -31,13 +37,26 @@ public struct RuleEngine {
       syntacticEvidenceGaps: [SyntaxEvidenceGap] = [],
       syntaxGrammar: SyntaxGrammar? = nil,
       ruleSeverities: [String: Severity] = [:],
+      disabledRuleSeverities: [String: Severity] = [:],
       isApproved: Bool = false
     ) {
       self.violations = violations
       self.syntacticEvidenceGaps = syntacticEvidenceGaps
       self.syntaxGrammar = syntaxGrammar
       self.ruleSeverities = ruleSeverities
+      self.disabledRuleSeverities = disabledRuleSeverities
       self.isApproved = isApproved
+    }
+
+    /// Every rule the run knew about, enabled or deferred, for the report.
+    public func reportedRules(failOn threshold: Severity) -> [ReportedRule] {
+      let enabled = ruleSeverities.map {
+        ReportedRule(ruleID: $0.key, severity: $0.value, failOn: threshold, enabled: true)
+      }
+      let disabled = disabledRuleSeverities.map {
+        ReportedRule(ruleID: $0.key, severity: $0.value, failOn: threshold, enabled: false)
+      }
+      return (enabled + disabled).sorted { $0.ruleID < $1.ruleID }
     }
   }
 
@@ -121,7 +140,8 @@ public struct RuleEngine {
       ruleSeverities: Dictionary(
         enabled.map { (type(of: $0.rule).ruleID, $0.settings.severity) },
         uniquingKeysWith: { _, last in last }
-      )
+      ),
+      disabledRuleSeverities: deferredRuleSeverities(context: context)
     )
   }
 
@@ -136,6 +156,22 @@ public struct RuleEngine {
       )
       return settings.enabled ? (rule, settings) : nil
     }
+  }
+
+  /// The rules configuration switched off, with the severity they would have reported at.
+  private func deferredRuleSeverities(context: RuleContext) -> [String: Severity] {
+    var deferred: [String: Severity] = [:]
+    for rule in rules {
+      let ruleType = type(of: rule)
+      let settings = configuredSettings(
+        for: ruleType.ruleID,
+        default: RuleSettings(enabled: true, severity: ruleType.defaultSeverity),
+        context: context
+      )
+      guard !settings.enabled else { continue }
+      deferred[ruleType.ruleID] = settings.severity
+    }
+    return deferred
   }
 
   /// Collects every enabled rule's declared files and resolves them in one provider call.

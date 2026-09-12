@@ -25,6 +25,18 @@ rules:
     enabled: true
     severity: error
 
+  # Advisory families needing parsed syntax. Listed rather than left to their defaults so this
+  # repository's own self-check states the same choice the upgrade note asks consumers to make.
+  known_issue_suppression:
+    enabled: true
+    severity: warning
+  implementation_stubbed:
+    enabled: true
+    severity: warning
+  unreachable_assertion:
+    enabled: true
+    severity: warning
+
 ignore:
   - "**/.build/**"
   - "**/Generated/**"

@@ -40,6 +40,36 @@ struct AdvisoryRuleAdoptionTests {
     #expect(result.ruleSeverities["weakened_assertion"] != nil)
   }
 
+  @Test("a deferred family is reported as deferred, not omitted as though it never existed")
+  func deferredRuleIsStillReported() async throws {
+    let configuration = Configuration(
+      rules: ["implementation_stubbed": RuleSettings(enabled: false, severity: .warning)]
+    )
+    let result = await RuleEngine().evaluate(
+      diff: [],
+      context: TestSupport.context(configuration: configuration)
+    )
+    let reported = result.reportedRules(failOn: .error)
+    let deferred = try #require(reported.first { $0.ruleID == "implementation_stubbed" })
+
+    #expect(!deferred.enabled)
+    // A rule that never ran cannot have failed the build, whatever its severity says.
+    #expect(!deferred.blocking)
+    #expect(reported.contains { $0.ruleID == "weakened_assertion" && $0.enabled })
+  }
+
+  @Test("a deferred family at a blocking severity is still reported non-blocking")
+  func deferredRuleAtErrorSeverityIsNotBlocking() {
+    let deferred = ReportedRule(
+      ruleID: "weakened_assertion",
+      severity: .error,
+      failOn: .error,
+      enabled: false
+    )
+
+    #expect(!deferred.blocking)
+  }
+
   @Test("a repository adopts a family by raising its severity, and the run reports it blocking")
   func adoptingARuleMakesItBlocking() async throws {
     let configuration = Configuration(

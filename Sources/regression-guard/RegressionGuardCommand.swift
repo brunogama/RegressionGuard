@@ -30,9 +30,9 @@ struct Check: AsyncParsableCommand {
   @Option(name: .long, help: "text, json, or github.")
   var format: String = "text"
 
-
   @Option(name: .long, help: "Write the versioned JSON report to this path.")
   var reportFile: String?
+
   @Option(name: .long, help: "Fail at or above this severity: info, warning, error.")
   var failOn: String = "error"
 
@@ -57,9 +57,7 @@ struct Check: AsyncParsableCommand {
       findings: violations,
       syntacticEvidenceGaps: result.syntacticEvidenceGaps,
       syntaxGrammar: result.syntaxGrammar,
-      rules: result.ruleSeverities
-        .map { ReportedRule(ruleID: $0.key, severity: $0.value, failOn: threshold) }
-        .sorted { $0.ruleID < $1.ruleID },
+      rules: result.reportedRules(failOn: threshold),
       approvalSuppressed: result.isApproved
     )
 
