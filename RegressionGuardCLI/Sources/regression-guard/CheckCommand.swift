@@ -2,6 +2,7 @@ import Commander
 import Foundation
 import RegressionGuardCommandLine
 import RegressionGuardKit
+import RegressionGuardSyntax
 
 struct Check: ParsableCommand {
   static let commandDescription = CommandDescription(
@@ -49,7 +50,18 @@ struct Check: ParsableCommand {
       throw ValidationError("--fail-on must be one of: info, warning, error")
     }
 
-    let runner = RegressionGuardRunner(repositoryDirectory: URL(fileURLWithPath: path))
+    // The parser the libraries cannot carry. RegressionGuardKit declares the provider and ships
+    // without one, so a run that does not inject it degrades every tree-reading detection and
+    // finds nothing at all for the families that have no text fallback. This is where it arrives.
+    let repositoryDirectory = URL(fileURLWithPath: path)
+    let runner = RegressionGuardRunner(
+      repositoryDirectory: repositoryDirectory,
+      syntacticEvidenceProvider: GitSyntacticEvidenceProvider(
+        repositoryDirectory: repositoryDirectory,
+        baseRef: base,
+        headRef: head
+      )
+    )
     let result = try await runner.evaluate(base: base, head: head)
     let violations = result.violations
     Self.reportEvidenceGaps(result.syntacticEvidenceGaps)

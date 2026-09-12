@@ -156,6 +156,18 @@ Find the way to swift-syntax-backed detection in RegressionGuard: syntactic evid
   the other direction - `return` above an assertion parses as `return assertion`, so the first
   stranded-assertion fixture was wrong where the rule was right.
 
+- [Shipping syntactic evidence provider](26-shipping-syntactic-evidence-provider.md): a real run
+  parses now. `GitSyntacticEvidenceProvider` lives in the CLI's parsing target, is built already
+  knowing its refs so a request names only paths, and reads every object a run needs - both sides of
+  every requested file - in a single `git cat-file --batch`; a `nil` head is the working tree, read
+  from the checkout including files never committed. Answers are paired to requests by position,
+  which is the only link git gives back, and an unpaired name is a failure rather than an absence.
+  Everything below this had passing tests while `CheckCommand` built its runner without a provider,
+  so every shipped run took the parserless path: the assertions are made against the built binary,
+  and the sharpest is `implementation_stubbed` firing end to end, since that family has no text
+  fallback and the finding cannot exist unless a tree really arrived. One spawn per run is recorded
+  rather than assumed, with `PATH` pointed at a shim on the child process only.
+
 ## Not yet specified
 
 - Promotion of advisory AST rule families to blocking, once per-rule false-positive rates exist. Depends on calibration data that cannot be gathered until the rules have shipped and been reviewed.
