@@ -264,7 +264,12 @@ struct SyntacticEvidenceEngineTests {
     let result = await engine.evaluate(evidence: bundle, context: TestSupport.context())
 
     #expect(result.violations.contains { $0.ruleID == "disabled_or_skipped_test" })
-    #expect(result.syntacticEvidenceGaps.isEmpty)
+    // The migrated rules ask for trees, and this engine has no provider, so the run degrades -
+    // visibly. The finding still lands, and the base side it could not read is named as a gap.
+    #expect(
+      result.syntacticEvidenceGaps.map(\.reason) == [.parserUnavailable]
+    )
+    #expect(result.syntacticEvidenceGaps.map(\.ref) == [.base])
   }
 
   private static func bundle(paths: [String] = ["Sources/A.swift"]) -> EvidenceBundle {

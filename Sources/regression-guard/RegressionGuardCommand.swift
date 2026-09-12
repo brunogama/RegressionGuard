@@ -83,6 +83,13 @@ struct Check: AsyncParsableCommand {
       "regression-guard: syntactic evidence incomplete for \(byPath.count) file(s) - "
         + "syntax-backed rules ran degraded and may have missed findings."
     )
+    // A run with no parser at all fails identically for every file it looked at, so naming each
+    // one says nothing the count above has not already said. Every other reason is per file and
+    // worth reading.
+    guard !gaps.allSatisfy({ $0.reason == .parserUnavailable }) else {
+      Console.writeError("  no Swift parser was supplied to this run, so no file was parsed.")
+      return
+    }
     for (path, fileGaps) in byPath.sorted(by: { $0.key < $1.key }) {
       let refs = fileGaps.map(\.ref.rawValue).sorted().joined(separator: ", ")
       let reasons = Set(fileGaps.map(\.reason.rawValue)).sorted().joined(separator: ", ")

@@ -1,7 +1,13 @@
 import Foundation
 
 /// Flags changes that make a test stop running without actually fixing it.
-public struct DisabledOrSkippedTestRule: Rule {
+///
+/// Two of this rule's four detections move to the tree - the skip markers and the test-function
+/// identity check - and two stay where they are. A deleted test file is a fact about the diff, and
+/// a test commented out in place is a comparison between an added comment and the removed line it
+/// repeats: both are answered by the diff itself whether or not a parser ran, so both are
+/// `diffViolations` rather than a fallback. See `DisabledOrSkippedTestRule+Syntax.swift`.
+public struct DisabledOrSkippedTestRule: SyntaxAwareRule {
   public static let ruleID = "disabled_or_skipped_test"
   public static let defaultSeverity = Severity.error
 
@@ -15,7 +21,17 @@ public struct DisabledOrSkippedTestRule: Rule {
 
   public init() {}
 
-  public func evaluate(fileDiff: FileDiff, context: RuleContext) async -> [Violation] {
+  public func diffViolations(fileDiff: FileDiff, context: RuleContext) -> [Violation] {
+    guard context.pathClassifier.isTestPath(fileDiff.displayPath) else { return [] }
+    let severity = Self.settings(from: context).severity
+    return deletedTestFileViolations(fileDiff: fileDiff, severity: severity)
+      + commentedOutTestViolations(fileDiff: fileDiff, severity: severity)
+  }
+
+  public func textFallbackViolations(
+    fileDiff: FileDiff,
+    context: RuleContext
+  ) async -> [Violation] {
     guard context.pathClassifier.isTestPath(fileDiff.displayPath) else { return [] }
     let severity = Self.settings(from: context).severity
     let identity = await functionIdentityViolations(
@@ -23,10 +39,7 @@ public struct DisabledOrSkippedTestRule: Rule {
       context: context,
       severity: severity
     )
-    return deletedTestFileViolations(fileDiff: fileDiff, severity: severity)
-      + skipMarkerViolations(fileDiff: fileDiff, severity: severity)
-      + commentedOutTestViolations(fileDiff: fileDiff, severity: severity)
-      + identity
+    return skipMarkerViolations(fileDiff: fileDiff, severity: severity) + identity
   }
 
   private func deletedTestFileViolations(

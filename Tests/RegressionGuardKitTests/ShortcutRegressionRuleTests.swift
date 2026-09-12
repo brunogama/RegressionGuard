@@ -4,7 +4,7 @@ import Testing
 @Suite("Shortcut regression rule tests")
 struct ShortcutRegressionRuleTests {
   @Test("behavior deletion has its own rule identity")
-  func behaviorDeletionHasItsOwnRuleIdentity() {
+  func behaviorDeletionHasItsOwnRuleIdentity() async {
     let diff = TestSupport.fileDiff(
       path: "Sources/Validator.swift",
       removed: [
@@ -14,7 +14,7 @@ struct ShortcutRegressionRuleTests {
       ]
     )
 
-    let findings = ControlFlowDeletionRule().evaluate(
+    let findings = await ControlFlowDeletionRule().evaluate(
       fileDiff: diff,
       context: TestSupport.context()
     )
@@ -24,7 +24,7 @@ struct ShortcutRegressionRuleTests {
   }
 
   @Test("error handling collapse has its own rule identity")
-  func errorHandlingCollapseHasItsOwnRuleIdentity() {
+  func errorHandlingCollapseHasItsOwnRuleIdentity() async {
     let diff = TestSupport.fileDiff(
       path: "Sources/Validator.swift",
       added: [
@@ -33,7 +33,7 @@ struct ShortcutRegressionRuleTests {
       ]
     )
 
-    let findings = UncheckedErrorPathRule().evaluate(
+    let findings = await UncheckedErrorPathRule().evaluate(
       fileDiff: diff,
       context: TestSupport.context()
     )
@@ -43,7 +43,7 @@ struct ShortcutRegressionRuleTests {
   }
 
   @Test("shortcut rules ignore test files")
-  func shortcutRulesIgnoreTestFiles() {
+  func shortcutRulesIgnoreTestFiles() async {
     let diff = TestSupport.fileDiff(
       path: "Tests/ValidatorTests.swift",
       removed: ["    if !isValid { throw ValidationError.invalid }"],
@@ -51,13 +51,13 @@ struct ShortcutRegressionRuleTests {
     )
 
     #expect(
-      ControlFlowDeletionRule().evaluate(
+      await ControlFlowDeletionRule().evaluate(
         fileDiff: diff,
         context: TestSupport.context()
       ).isEmpty
     )
     #expect(
-      UncheckedErrorPathRule().evaluate(
+      await UncheckedErrorPathRule().evaluate(
         fileDiff: diff,
         context: TestSupport.context()
       ).isEmpty

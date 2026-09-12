@@ -21,6 +21,9 @@ public struct LineSpan: Codable, Equatable, Hashable, Sendable {
 
   public func contains(line: Int) -> Bool { lineNumbers.contains(line) }
 
+  /// - Returns: `true` when `other` lies entirely inside this span.
+  public func contains(_ other: Self) -> Bool { start <= other.start && other.end <= end }
+
   public func intersects(_ other: Self) -> Bool { start <= other.end && other.start <= end }
 
   public func intersects(lines: some Sequence<Int>) -> Bool {
@@ -60,7 +63,10 @@ public extension SyntaxNodeKind {
   static let macroExpansionExpr = Self("macroExpansionExpr")
   static let booleanLiteralExpr = Self("booleanLiteralExpr")
   static let integerLiteralExpr = Self("integerLiteralExpr")
+  static let floatLiteralExpr = Self("floatLiteralExpr")
   static let stringLiteralExpr = Self("stringLiteralExpr")
+  static let nilLiteralExpr = Self("nilLiteralExpr")
+  static let infixOperatorExpr = Self("infixOperatorExpr")
   static let forceUnwrapExpr = Self("forceUnwrapExpr")
   static let optionalChainingExpr = Self("optionalChainingExpr")
   static let tryExpr = Self("tryExpr")
@@ -68,6 +74,7 @@ public extension SyntaxNodeKind {
   static let switchExpr = Self("switchExpr")
   static let guardStmt = Self("guardStmt")
   static let whileStmt = Self("whileStmt")
+  static let repeatStmt = Self("repeatStmt")
   static let forStmt = Self("forStmt")
   static let doStmt = Self("doStmt")
   static let catchClause = Self("catchClause")

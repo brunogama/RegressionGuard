@@ -1,7 +1,11 @@
 import Foundation
 
 /// Flags assertions that were removed or turned into tautologies instead of genuinely fixed.
-public struct WeakenedAssertionRule: Rule {
+///
+/// Every one of this rule's detections reads source structure, so all three move to the tree and
+/// this file is what remains as the degradation path. See `WeakenedAssertionRule+Syntax.swift` for
+/// the syntactic contract and what it catches that these matchers do not.
+public struct WeakenedAssertionRule: SyntaxAwareRule {
   public static let ruleID = "weakened_assertion"
   public static let defaultSeverity = Severity.error
 
@@ -20,7 +24,14 @@ public struct WeakenedAssertionRule: Rule {
 
   public init() {}
 
-  public func evaluate(fileDiff: FileDiff, context: RuleContext) async -> [Violation] {
+  /// Nothing here is answered by the diff alone: a weakened assertion is a statement about the
+  /// assertions a file makes, which is what the tree reports and what these matchers approximate.
+  public func diffViolations(fileDiff: FileDiff, context: RuleContext) -> [Violation] { [] }
+
+  public func textFallbackViolations(
+    fileDiff: FileDiff,
+    context: RuleContext
+  ) async -> [Violation] {
     guard context.pathClassifier.isTestPath(fileDiff.displayPath) else { return [] }
     let severity = Self.settings(from: context).severity
     let deleted = await deletedFileViolations(

@@ -24,6 +24,9 @@ public struct Violation: Codable, Equatable, Sendable {
   public var line: Int?
   public let message: String
   public var detail: String?
+  /// What this finding was judged on. Defaults to the diff, which is what every detection that
+  /// never asks for a tree reads.
+  public var evidence: ViolationEvidence
 
   public init(
     ruleID: String,
@@ -31,7 +34,8 @@ public struct Violation: Codable, Equatable, Sendable {
     file: String,
     line: Int? = nil,
     message: String,
-    detail: String? = nil
+    detail: String? = nil,
+    evidence: ViolationEvidence = .diff
   ) {
     self.ruleID = ruleID
     self.severity = severity
@@ -39,6 +43,14 @@ public struct Violation: Codable, Equatable, Sendable {
     self.line = line
     self.message = message
     self.detail = detail
+    self.evidence = evidence
+  }
+
+  /// The same finding, recorded as judged on `evidence`.
+  public func judged(on evidence: ViolationEvidence) -> Self {
+    var copy = self
+    copy.evidence = evidence
+    return copy
   }
 }
 
@@ -136,5 +148,14 @@ public struct RuleContext {
   public var isApproved: Bool {
     let marker = configuration.approvalMarker.lowercased()
     return commitMessages.contains { $0.lowercased().contains(marker) }
+  }
+
+  /// `true` when this path carries shipped behaviour: neither a test nor an ignored path.
+  ///
+  /// The production shortcut rules all ask this, on both their line and their tree paths, so it
+  /// lives here rather than being answered privately - and identically - by each of them.
+  public func isProductionPath(_ fileDiff: FileDiff) -> Bool {
+    !pathClassifier.isTestPath(fileDiff.displayPath)
+      && !pathClassifier.isIgnored(fileDiff.displayPath)
   }
 }
