@@ -63,11 +63,14 @@ extension TestFunctionIdentity {
   /// The functions `tree` declares, and whether each one still reads as a test.
   ///
   /// A function is a test when it is named for one or carries `@Test`. The attribute is read off
-  /// the declaration itself, so no line-distance guess is involved.
+  /// the declaration itself, so no line-distance guess is involved - and through
+  /// `carriesAttribute(named:)`, so it is found in either shape the projection may write it. A
+  /// projection whose attributes this could not see would make every `@Test` function read as an
+  /// ordinary one, which quietly excuses exactly the renames this rule exists to catch.
   static func functions(in tree: SyntaxTree) -> [SyntacticFunction] {
     tree.nodes(ofKind: .functionDecl).compactMap { node in
       guard let name = node.name else { return nil }
-      let isTest = name.lowercased().hasPrefix("test") || node.hasAttribute(named: "Test")
+      let isTest = name.lowercased().hasPrefix("test") || node.carriesAttribute(named: "Test")
       return SyntacticFunction(name: name, isTest: isTest, span: node.span)
     }
   }

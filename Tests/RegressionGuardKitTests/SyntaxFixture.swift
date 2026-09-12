@@ -75,6 +75,58 @@ enum SyntaxFixture {
     )
   }
 
+  /// A declaration whose attributes are projected *only* as child nodes.
+  ///
+  /// The counterpart of `functionWithAttributeSpellings`. `function` above fills both shapes,
+  /// which is convenient but cannot tell the two apart - a rule reading one shape only still
+  /// passes against it. These two fixtures are what actually pin the reading.
+  static func functionWithAttributeNodes(
+    _ name: String,
+    lines: ClosedRange<Int>,
+    attributes: [SyntaxNode],
+    body: [SyntaxNode] = []
+  ) -> SyntaxNode {
+    SyntaxNode(
+      kind: .functionDecl,
+      span: LineSpan(start: lines.lowerBound, end: lines.upperBound),
+      name: name,
+      children: attributes
+        + [
+          SyntaxNode(
+            kind: .codeBlock,
+            span: LineSpan(start: lines.lowerBound + 1, end: lines.upperBound),
+            children: body
+          )
+        ]
+    )
+  }
+
+  /// A declaration whose attributes are projected as strings rather than as child nodes.
+  ///
+  /// `SyntaxNode.attributes` is the documented carrier, so this is the shape a projector following
+  /// the documentation produces. Spellings may keep their arguments (`Test(.disabled)`). A rule
+  /// that only read the node shape would go silent here rather than wrong, which is worse.
+  static func functionWithAttributeSpellings(
+    _ name: String,
+    lines: ClosedRange<Int>,
+    attributes: [String],
+    body: [SyntaxNode] = []
+  ) -> SyntaxNode {
+    SyntaxNode(
+      kind: .functionDecl,
+      span: LineSpan(start: lines.lowerBound, end: lines.upperBound),
+      name: name,
+      attributes: attributes,
+      children: [
+        SyntaxNode(
+          kind: .codeBlock,
+          span: LineSpan(start: lines.lowerBound + 1, end: lines.upperBound),
+          children: body
+        )
+      ]
+    )
+  }
+
   /// An attribute written on a declaration, with its arguments projected as children.
   static func attribute(
     _ name: String,

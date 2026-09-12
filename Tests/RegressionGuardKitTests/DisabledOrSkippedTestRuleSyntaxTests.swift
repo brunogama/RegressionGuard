@@ -34,6 +34,96 @@ struct DisabledOrSkippedTestRuleSyntaxTests {
     #expect(violations.first?.evidence == .syntax)
   }
 
+  @Test("flags a disabling trait kept as an attribute spelling rather than a child node")
+  func flagsDisablingTraitFromAttributeSpelling() async {
+    let violations = await evaluateFile(
+      base: [SyntaxFixture.function("answers", lines: 4...6)],
+      head: [
+        SyntaxFixture.functionWithAttributeSpellings(
+          "answers",
+          lines: 4...6,
+          attributes: ["Test(.disabled(\"flaky\"))"]
+        )
+      ],
+      lines: [DiffLine(kind: .added, number: 4, text: "")]
+    )
+
+    #expect(violations.count == 1)
+    #expect(violations.first?.detail?.contains("answers") == true)
+    #expect(violations.first?.evidence == .syntax)
+  }
+
+  @Test("flags a @Disabled attribute kept as a spelling rather than a child node")
+  func flagsDisabledAttributeFromSpelling() async {
+    let violations = await evaluateFile(
+      base: [SyntaxFixture.function("testAnswer", lines: 4...6)],
+      head: [
+        SyntaxFixture.functionWithAttributeSpellings(
+          "testAnswer",
+          lines: 4...6,
+          attributes: ["Disabled"]
+        )
+      ],
+      lines: [DiffLine(kind: .added, number: 4, text: "")]
+    )
+
+    #expect(violations.count == 1)
+  }
+
+  @Test("does not flag a body edit under a test already disabled by an attribute spelling")
+  func doesNotFlagBodyEditUnderASpelledDisable() async {
+    let disabled = SyntaxFixture.functionWithAttributeSpellings(
+      "answers",
+      lines: 4...8,
+      attributes: ["Test(.disabled)"]
+    )
+    let violations = await evaluateFile(
+      base: [disabled],
+      head: [disabled],
+      lines: [DiffLine(kind: .added, number: 6, text: "")]
+    )
+
+    #expect(violations.isEmpty)
+  }
+
+  @Test("reads @Test off a declaration whose attributes are child nodes")
+  func readsTestAttributeFromChildNodes() async {
+    // The mirror of the case above: identity must see `@Test` in the node shape too, or a renamed
+    // test would read as an ordinary function and escape the rule entirely.
+    let violations = await evaluateFile(
+      base: [
+        SyntaxFixture.functionWithAttributeNodes(
+          "answers",
+          lines: 4...6,
+          attributes: [SyntaxFixture.attribute("Test", line: 4)]
+        )
+      ],
+      head: [SyntaxFixture.function("renamed", lines: 4...6)],
+      lines: [DiffLine(kind: .removed, number: 4, text: "")]
+    )
+
+    #expect(violations.count == 1)
+    #expect(violations.first?.message.contains("`answers` was removed") == true)
+  }
+
+  @Test("reads @Test off a declaration whose attributes are spellings")
+  func readsTestAttributeFromSpellings() async {
+    let violations = await evaluateFile(
+      base: [
+        SyntaxFixture.functionWithAttributeSpellings(
+          "answers",
+          lines: 4...6,
+          attributes: ["Test"]
+        )
+      ],
+      head: [SyntaxFixture.function("renamed", lines: 4...6)],
+      lines: [DiffLine(kind: .removed, number: 4, text: "")]
+    )
+
+    #expect(violations.count == 1)
+    #expect(violations.first?.message.contains("`answers` was removed") == true)
+  }
+
   @Test("flags a throw of XCTSkip inside a test body")
   func flagsSkipCall() async {
     let head = SyntaxFixture.function(

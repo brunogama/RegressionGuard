@@ -30,9 +30,11 @@ public extension DisabledOrSkippedTestRule {
 
   /// Markers the change put there.
   ///
-  /// Scoped to the marker's own span, not to the declaration around it: a test that was already
-  /// disabled before this change stays out of the report even when its body was edited, which is
-  /// the behaviour the line path gets for free by only ever seeing added lines.
+  /// Scoped to the marker, not to the declaration around it: a test that was already disabled
+  /// before this change stays out of the report even when its body was edited, which is the
+  /// behaviour the line path gets for free by only ever seeing added lines. A marker with a node
+  /// of its own is judged on that node's span; one legible only on its declaration is judged on
+  /// the declaration's own lines, since that is where an attribute is written.
   private func skipMarkerViolations(
     syntax: SyntacticFileEvidence,
     map: ChangedLineMap,
@@ -40,29 +42,41 @@ public extension DisabledOrSkippedTestRule {
   ) -> [Violation] {
     guard let head = syntax.headTree else { return [] }
     return TestSkipMarker.markers(in: head)
-      .filter { map.touches($0.span, at: .head) }
+      .filter { Self.isInTheChange($0, map: map) }
       .map { marker in
         Violation(
           ruleID: Self.ruleID,
           severity: severity,
           file: syntax.path,
-          line: map.reportLine(for: marker.span, at: .head),
+          line: map.reportLine(for: marker.node.span, at: .head),
           message: "Test appears to be disabled or skipped instead of fixed.",
           detail: Self.detail(for: marker, in: head)
         )
       }
   }
 
-  private static func detail(for marker: SyntaxNode, in tree: SyntaxTree) -> String {
-    let marked = TestSkipMarker.description(of: marker)
-    guard
-      let declaration = tree.innermostNode(ofKind: .functionDecl, containing: marker.span)
-        ?? tree.innermostNode(ofKind: .classDecl, containing: marker.span)
-        ?? tree.innermostNode(ofKind: .structDecl, containing: marker.span),
-      let name = declaration.name
-    else {
-      return marked + " stops a test from running."
+  private static func isInTheChange(_ marker: TestSkipMarker, map: ChangedLineMap) -> Bool {
+    marker.isPrecise
+      ? map.touches(marker.node.span, at: .head)
+      : map.changeScope(of: marker.node, at: .head) == .own
+  }
+
+  private static func detail(for marker: TestSkipMarker, in tree: SyntaxTree) -> String {
+    guard let name = declarationName(for: marker, in: tree) else {
+      return marker.label + " stops a test from running."
     }
-    return marked + " stops `" + name + "` from running."
+    return marker.label + " stops `" + name + "` from running."
+  }
+
+  /// The declaration the marker switches off: itself when the marker was only legible there, and
+  /// otherwise the smallest declaration the marker node sits inside.
+  private static func declarationName(for marker: TestSkipMarker, in tree: SyntaxTree) -> String? {
+    guard marker.isPrecise else { return marker.node.name }
+    let span = marker.node.span
+    let declaration =
+      tree.innermostNode(ofKind: .functionDecl, containing: span)
+      ?? tree.innermostNode(ofKind: .classDecl, containing: span)
+      ?? tree.innermostNode(ofKind: .structDecl, containing: span)
+    return declaration?.name
   }
 }
