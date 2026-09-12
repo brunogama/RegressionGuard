@@ -59,7 +59,8 @@ struct Check: AsyncParsableCommand {
       syntaxGrammar: result.syntaxGrammar,
       rules: result.ruleSeverities
         .map { ReportedRule(ruleID: $0.key, severity: $0.value, failOn: threshold) }
-        .sorted { $0.ruleID < $1.ruleID }
+        .sorted { $0.ruleID < $1.ruleID },
+      approvalSuppressed: result.isApproved
     )
 
     if let reportFile {

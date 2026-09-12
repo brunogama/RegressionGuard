@@ -246,10 +246,17 @@ every field they already read; the additions are:
 | `syntaxGrammar` | the swift-syntax alignment series that judged the run, absent when no parser was available |
 | `rules` | every rule that ran and whether it could fail the build, so a family that found nothing can be told from one that was never present |
 
-**If your build is about to turn red**, it is an existing blocking rule reporting something the
-line matcher used to miss - none of the new families can do it at their defaults. Read the
-finding's `evidence` field first: `degradedDiff` means the sharper check could not run and the
-finding stands at text precision. Then either fix the finding, or lower that rule's severity in
+**If your build is about to turn red**, check `--fail-on` first.
+
+- On the default `--fail-on error`, it is an existing blocking rule reporting something the line
+  matcher used to miss. The new families report at `warning` and cannot fail the run.
+- **If you run `--fail-on warning`**, the three new families *can* fail it, with no configuration
+  change on your part, because `warning` is exactly where they report. Either defer them with
+  `enabled: false` until you have worked through what they find, or keep the threshold and treat
+  their findings as a backlog.
+
+Then read the finding's `evidence` field: `degradedDiff` means the sharper check could not run
+and the finding stands at text precision. Fix the finding, or lower that rule's severity in
 `.regressionguard.yml` while you work through the backlog.
 
 ## Architecture

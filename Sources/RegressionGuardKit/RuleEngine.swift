@@ -19,17 +19,25 @@ public struct RuleEngine {
     /// the findings, because a family that found nothing leaves none. Reported so a clean result
     /// can be told from an absent rule.
     public let ruleSeverities: [String: Severity]
+    /// `true` when an approval marker stopped every rule from running.
+    ///
+    /// Without it an approved run is byte-shaped like a guard that has no rules: no findings, no
+    /// rule list, exit zero. That is the same "absent reads as never present" ambiguity
+    /// `ruleSeverities` exists to close, so the suppression says so rather than looking clean.
+    public let isApproved: Bool
 
     public init(
       violations: [Violation],
       syntacticEvidenceGaps: [SyntaxEvidenceGap] = [],
       syntaxGrammar: SyntaxGrammar? = nil,
-      ruleSeverities: [String: Severity] = [:]
+      ruleSeverities: [String: Severity] = [:],
+      isApproved: Bool = false
     ) {
       self.violations = violations
       self.syntacticEvidenceGaps = syntacticEvidenceGaps
       self.syntaxGrammar = syntaxGrammar
       self.ruleSeverities = ruleSeverities
+      self.isApproved = isApproved
     }
   }
 
@@ -89,7 +97,7 @@ public struct RuleEngine {
 
   /// Evaluates every enabled rule, resolving the syntactic evidence they declared they need.
   public func evaluate(evidence: EvidenceBundle, context: RuleContext) async -> Result {
-    guard !context.isApproved else { return Result(violations: []) }
+    guard !context.isApproved else { return Result(violations: [], isApproved: true) }
 
     let enabled = enabledRules(context: context)
     let resolved = resolvingSyntacticEvidence(in: evidence, for: enabled, context: context)

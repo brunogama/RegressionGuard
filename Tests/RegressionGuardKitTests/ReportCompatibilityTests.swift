@@ -45,7 +45,8 @@ struct ReportCompatibilityTests {
       message: "Assertion was removed.",
       evidence: .degradedDiff
     )
-    let findings = try #require(try object(report(findings: [degraded]))["findings"] as? [[String: Any]])
+    let encoded = try object(report(findings: [degraded]))
+    let findings = try #require(encoded["findings"] as? [[String: Any]])
 
     #expect(findings.first?["evidence"] as? String == "degradedDiff")
   }
@@ -58,7 +59,8 @@ struct ReportCompatibilityTests {
       file: "Sources/Generated.swift",
       message: "Change escaped review."
     )
-    let findings = try #require(try object(report(findings: [plain]))["findings"] as? [[String: Any]])
+    let encoded = try object(report(findings: [plain]))
+    let findings = try #require(encoded["findings"] as? [[String: Any]])
 
     #expect(findings.first?["evidence"] as? String == "diff")
   }
@@ -105,6 +107,32 @@ struct ReportCompatibilityTests {
     let grammar = try #require(encoded["syntaxGrammar"] as? [String: Any])
 
     #expect(grammar["alignmentSeries"] as? Int == 603)
+  }
+
+  @Test("an approved run says so, rather than looking like a guard with no rules")
+  func approvedRunIsMarked() async throws {
+    let configuration = Configuration(approvalMarker: "regression-guard:approve")
+    let context = TestSupport.context(
+      configuration: configuration,
+      commitMessages: ["fix: something\n\nregression-guard:approve"]
+    )
+    let result = await RuleEngine().evaluate(diff: [], context: context)
+
+    #expect(result.isApproved)
+    #expect(result.ruleSeverities.isEmpty)
+
+    let encoded = try object(
+      GuardReport(
+        toolVersion: "0.1.0",
+        repository: "RegressionGuard",
+        baseRef: "main",
+        headRef: "HEAD",
+        runID: "HEAD",
+        findings: [],
+        approvalSuppressed: result.isApproved
+      )
+    )
+    #expect(encoded["approvalSuppressed"] as? Bool == true)
   }
 
   @Test("a rule is advisory exactly when it cannot reach the blocking threshold")

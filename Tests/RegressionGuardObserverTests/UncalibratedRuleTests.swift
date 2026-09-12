@@ -82,7 +82,8 @@ struct UncalibratedRuleTests {
       )
     )
 
-    #expect(observation.calibrations.map(\.ruleID) == ["implementation_stubbed", "weakened_assertion"])
+    let ruleIDs = observation.calibrations.map(\.ruleID)
+    #expect(ruleIDs == ["implementation_stubbed", "weakened_assertion"])
     #expect(observation.calibrations.first?.findingCount == 1)
   }
 }

@@ -2,7 +2,6 @@ import ArgumentParser
 import Foundation
 import RegressionGuardKit
 
-
 struct Coverage: ParsableCommand {
   static let configuration = CommandConfiguration(
     commandName: "coverage",
