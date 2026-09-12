@@ -47,7 +47,7 @@ jobs:
           summaries = [
               item["summary"]["lines"]
               for item in files
-              if "/Sources/RegressionGuardKit/" in item["filename"]
+              if "Sources/RegressionGuardKit/" in item["filename"]
           ]
           total = sum(summary["count"] for summary in summaries)
           hit = sum(summary["covered"] for summary in summaries)
