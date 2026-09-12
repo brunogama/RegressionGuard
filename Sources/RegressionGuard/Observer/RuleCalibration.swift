@@ -17,9 +17,9 @@ public struct RuleCalibration: Codable, Equatable, Sendable {
   public init(ruleID: String, findings: [ObservedFinding]) {
     self.ruleID = ruleID
     findingCount = findings.count
-    confirmedCount = findings.count { $0.reviewOutcome == .confirmed }
-    legitimateCount = findings.count { $0.reviewOutcome == .legitimate }
-    inconclusiveCount = findings.count { $0.reviewOutcome == .inconclusive }
+    confirmedCount = findings.filter { $0.reviewOutcome == .confirmed }.count
+    legitimateCount = findings.filter { $0.reviewOutcome == .legitimate }.count
+    inconclusiveCount = findings.filter { $0.reviewOutcome == .inconclusive }.count
     reviewedFindingCount = confirmedCount + legitimateCount + inconclusiveCount
     let rateDenominator = confirmedCount + legitimateCount
     falsePositiveRate =
