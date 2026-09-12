@@ -2,10 +2,29 @@ import Foundation
 
 /// Runs every enabled rule over the unified evidence bundle.
 public struct RuleEngine {
-  public let rules: [Rule]
+  /// Everything one run produced: the findings, plus the holes in the evidence they were judged
+  /// on. A gap is reported rather than dropped, so a degraded run cannot read as a clean one.
+  public struct Result: Equatable, Sendable {
+    public let violations: [Violation]
+    public let syntacticEvidenceGaps: [SyntaxEvidenceGap]
 
-  public init(rules: [Rule] = Self.defaultRules) {
+    public init(violations: [Violation], syntacticEvidenceGaps: [SyntaxEvidenceGap] = []) {
+      self.violations = violations
+      self.syntacticEvidenceGaps = syntacticEvidenceGaps
+    }
+  }
+
+  public let rules: [Rule]
+  /// Supplies parsed trees for the files rules declare they need. `nil` means this run cannot
+  /// parse, and every declared file becomes an explicit gap rather than a silent pass.
+  public let syntacticEvidenceProvider: SyntacticEvidenceProvider?
+
+  public init(
+    rules: [Rule] = Self.defaultRules,
+    syntacticEvidenceProvider: SyntacticEvidenceProvider? = nil
+  ) {
     self.rules = rules
+    self.syntacticEvidenceProvider = syntacticEvidenceProvider
   }
 
   public static var defaultRules: [Rule] {
@@ -23,6 +42,11 @@ public struct RuleEngine {
 
   /// Compatibility entry point for callers that only have parsed file diffs.
   public func run(diff: [FileDiff], context: RuleContext) -> [Violation] {
+    evaluate(diff: diff, context: context).violations
+  }
+
+  /// Entry point for callers that only have parsed file diffs and want the evidence gaps too.
+  public func evaluate(diff: [FileDiff], context: RuleContext) -> Result {
     let evidence = EvidenceBundle(
       fileDiffs: diff,
       commit: CommitEvidence(
@@ -31,28 +55,25 @@ public struct RuleEngine {
         messages: context.commitMessages
       )
     )
-    return run(evidence: evidence, context: context)
+    return evaluate(evidence: evidence, context: context)
   }
 
   /// Evaluates every enabled rule against one canonical evidence bundle.
   public func run(evidence: EvidenceBundle, context: RuleContext) -> [Violation] {
-    let visibleEvidence = excludingIgnoredPaths(from: evidence, context: context)
-    guard !context.isApproved else { return [] }
+    evaluate(evidence: evidence, context: context).violations
+  }
+
+  /// Evaluates every enabled rule, resolving the syntactic evidence they declared they need.
+  public func evaluate(evidence: EvidenceBundle, context: RuleContext) -> Result {
+    guard !context.isApproved else { return Result(violations: []) }
+
+    let enabled = enabledRules(context: context)
+    let resolved = resolvingSyntacticEvidence(in: evidence, for: enabled, context: context)
+    let visibleEvidence = excludingIgnoredPaths(from: resolved, context: context)
     var violations: [Violation] = []
 
-    for rule in rules {
-      let ruleType = type(of: rule)
-      let defaultSettings = RuleSettings(
-        enabled: true,
-        severity: ruleType.defaultSeverity
-      )
-      let settings = configuredSettings(
-        for: ruleType.ruleID,
-        default: defaultSettings,
-        context: context
-      )
-      guard settings.enabled else { continue }
-      let evidenceForRule = ruleType.inspectsIgnoredPaths ? evidence : visibleEvidence
+    for (rule, settings) in enabled {
+      let evidenceForRule = type(of: rule).inspectsIgnoredPaths ? resolved : visibleEvidence
       var findings = rule.evaluate(evidence: evidenceForRule, context: context)
       for index in findings.indices {
         findings[index].severity = settings.severity
@@ -60,7 +81,49 @@ public struct RuleEngine {
       violations.append(contentsOf: findings)
     }
 
-    return violations
+    return Result(violations: violations, syntacticEvidenceGaps: resolved.syntax.gaps)
+  }
+
+  /// The rules configuration leaves switched on, paired with the settings they report at.
+  private func enabledRules(context: RuleContext) -> [(rule: Rule, settings: RuleSettings)] {
+    rules.compactMap { rule in
+      let ruleType = type(of: rule)
+      let settings = configuredSettings(
+        for: ruleType.ruleID,
+        default: RuleSettings(enabled: true, severity: ruleType.defaultSeverity),
+        context: context
+      )
+      return settings.enabled ? (rule, settings) : nil
+    }
+  }
+
+  /// Collects every enabled rule's declared files and resolves them in one provider call.
+  ///
+  /// One call, not one per file: base-ref reads cost a subprocess each and dominate the run, so
+  /// batching them is part of the contract rather than an optimization.
+  private func resolvingSyntacticEvidence(
+    in evidence: EvidenceBundle,
+    for enabled: [(rule: Rule, settings: RuleSettings)],
+    context: RuleContext
+  ) -> EvidenceBundle {
+    guard evidence.syntax.isEmpty else { return evidence }
+
+    let visibleDiffs = evidence.fileDiffs.filter {
+      !context.pathClassifier.isIgnored($0.displayPath)
+    }
+    var requests: [SyntacticEvidenceRequest] = []
+    var seen: Set<SyntacticEvidenceRequest> = []
+    for (rule, _) in enabled {
+      let diffs = type(of: rule).inspectsIgnoredPaths ? evidence.fileDiffs : visibleDiffs
+      for request in diffs.flatMap({ rule.syntacticEvidenceRequests(for: $0) })
+      where seen.insert(request).inserted {
+        requests.append(request)
+      }
+    }
+    guard !requests.isEmpty else { return evidence }
+
+    let provider = syntacticEvidenceProvider ?? UnavailableSyntacticEvidenceProvider()
+    return evidence.withSyntacticEvidence(provider.syntacticEvidence(for: requests))
   }
 
   private func configuredSettings(
@@ -91,94 +154,8 @@ public struct RuleEngine {
       fileContents: visibleContents,
       pathEvidence: visiblePathEvidence,
       commit: evidence.commit,
-      repository: evidence.repository
+      repository: evidence.repository,
+      syntax: evidence.syntax.retainingPaths(visiblePaths)
     )
-  }
-}
-
-/// Flags concrete changes that disable or remove the configured change-validation surface.
-public struct GuardConfigurationWeakeningRule: Rule {
-  public static let ruleID = "enforcement_weakening"
-  public static let defaultSeverity = Severity.error
-
-  public init() {}
-
-  public func evaluate(fileDiff: FileDiff, context: RuleContext) -> [Violation] {
-    guard let message = Self.message(for: fileDiff) else { return [] }
-    return [
-      Violation(
-        ruleID: Self.ruleID,
-        severity: Self.settings(from: context).severity,
-        file: fileDiff.displayPath,
-        message: message,
-        detail: Self.changedLines(in: fileDiff)
-      )
-    ]
-  }
-
-  private static func message(for fileDiff: FileDiff) -> String? {
-    let path = fileDiff.displayPath
-    if isRegressionGuardConfiguration(path), disablesRule(in: fileDiff) {
-      return "RegressionGuard rule configuration was disabled."
-    }
-    if isWorkflow(path), removesTestCommand(in: fileDiff) {
-      return "CI test command was removed without a replacement."
-    }
-    if isSwiftLintConfiguration(path), disablesSwiftLintRule(in: fileDiff) {
-      return "SwiftLint disabled-rules configuration was added."
-    }
-    if path == "Package.swift", removesTestTarget(in: fileDiff) {
-      return "SwiftPM test target was removed without a replacement."
-    }
-    return nil
-  }
-
-  private static func isRegressionGuardConfiguration(_ path: String) -> Bool {
-    [".regressionguard.yml", ".regressionguard.yaml", ".regressionguard.json"].contains(path)
-  }
-
-  private static func isWorkflow(_ path: String) -> Bool {
-    path.hasPrefix(".github/workflows/") && path.hasSuffix(".yml")
-      || path.hasPrefix(".github/workflows/") && path.hasSuffix(".yaml")
-  }
-
-  private static func isSwiftLintConfiguration(_ path: String) -> Bool {
-    path == ".swiftlint.yml" || path == ".swiftlint.yaml"
-  }
-
-  private static func disablesRule(in fileDiff: FileDiff) -> Bool {
-    fileDiff.addedLines.contains { line in
-      let text = line.text.lowercased().replacingOccurrences(of: " ", with: "")
-      return text == "enabled:false" || text == "\"enabled\":false"
-    }
-  }
-
-  private static func removesTestCommand(in fileDiff: FileDiff) -> Bool {
-    let removedTestCommand = fileDiff.removedLines.contains { isTestCommand($0.text) }
-    let addedTestCommand = fileDiff.addedLines.contains { isTestCommand($0.text) }
-    return removedTestCommand && !addedTestCommand
-  }
-
-  private static func isTestCommand(_ text: String) -> Bool {
-    text.contains("swift test") || text.contains("xcodebuild test")
-  }
-
-  private static func disablesSwiftLintRule(in fileDiff: FileDiff) -> Bool {
-    fileDiff.addedLines.contains { line in
-      line.text.trimmingCharacters(in: .whitespaces) == "disabled_rules:"
-    }
-  }
-
-  private static func removesTestTarget(in fileDiff: FileDiff) -> Bool {
-    let removedTarget = fileDiff.removedLines.contains { $0.text.contains(".testTarget(") }
-    let addedTarget = fileDiff.addedLines.contains { $0.text.contains(".testTarget(") }
-    return removedTarget && !addedTarget
-  }
-
-  private static func changedLines(in fileDiff: FileDiff) -> String {
-    (fileDiff.removedLines + fileDiff.addedLines)
-      .prefix(5)
-      .map { $0.text.trimmingCharacters(in: .whitespaces) }
-      .joined(separator: "\n")
   }
 }

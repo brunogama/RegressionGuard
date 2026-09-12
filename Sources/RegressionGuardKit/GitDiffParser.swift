@@ -61,6 +61,9 @@ public struct FileDiff: Codable, Equatable, Sendable {
 
   public var addedLines: [DiffLine] { hunks.flatMap { $0.addedLines } }
   public var removedLines: [DiffLine] { hunks.flatMap { $0.removedLines } }
+
+  /// `true` when this file is Swift source, and so can carry syntactic evidence.
+  public var isSwiftSource: Bool { displayPath.hasSuffix(".swift") }
 }
 
 /// Parses the output of `git diff --no-color -U<n>` into structured `FileDiff` values.

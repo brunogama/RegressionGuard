@@ -112,19 +112,35 @@ public struct EvidenceBundle: Codable, Equatable, Sendable {
   public let pathEvidence: [String: PathEvidence]
   public let commit: CommitEvidence
   public let repository: RepositoryEvidence
+  /// Parsed base and head trees, for the files some enabled rule asked to have parsed. A third
+  /// kind of evidence alongside the diff-local and repository-wide signals above.
+  public let syntax: SyntacticEvidence
 
   public init(
     fileDiffs: [FileDiff],
     fileContents: [String: FileContentEvidence] = [:],
     pathEvidence: [String: PathEvidence] = [:],
     commit: CommitEvidence,
-    repository: RepositoryEvidence = RepositoryEvidence()
+    repository: RepositoryEvidence = RepositoryEvidence(),
+    syntax: SyntacticEvidence = .none
   ) {
     self.fileDiffs = fileDiffs
     self.fileContents = fileContents
     self.pathEvidence = pathEvidence
     self.commit = commit
     self.repository = repository
+    self.syntax = syntax
+  }
+
+  public func withSyntacticEvidence(_ syntax: SyntacticEvidence) -> Self {
+    Self(
+      fileDiffs: fileDiffs,
+      fileContents: fileContents,
+      pathEvidence: pathEvidence,
+      commit: commit,
+      repository: repository,
+      syntax: syntax
+    )
   }
 }
 /// A single, independently-testable detector. Each rule looks at one `FileDiff` at a time and
@@ -134,10 +150,16 @@ public protocol Rule {
   static var ruleID: String { get }
   static var defaultSeverity: Severity { get }
   static var inspectsIgnoredPaths: Bool { get }
+  /// `true` when this rule reads parsed syntax. A rule never parses for itself: it declares the
+  /// need here, and the engine resolves every declared file in one batched call before evaluating.
+  static var requiresSyntacticEvidence: Bool { get }
   func evaluate(evidence: EvidenceBundle, context: RuleContext) -> [Violation]
   /// - Returns: violations found in `fileDiff`. Do not filter by config `enabled` here -
   ///   the engine does that before calling `evaluate`.
   func evaluate(fileDiff: FileDiff, context: RuleContext) -> [Violation]
+  /// - Returns: the files this rule wants parsed out of `fileDiff`. Override to narrow further
+  ///   than "every Swift file I can see".
+  func syntacticEvidenceRequests(for fileDiff: FileDiff) -> [SyntacticEvidenceRequest]
 }
 
 public extension Rule {
@@ -145,8 +167,13 @@ public extension Rule {
     evidence.fileDiffs.flatMap { evaluate(fileDiff: $0, context: context) }
   }
 
+  func syntacticEvidenceRequests(for fileDiff: FileDiff) -> [SyntacticEvidenceRequest] {
+    guard Self.requiresSyntacticEvidence, fileDiff.isSwiftSource else { return [] }
+    return [SyntacticEvidenceRequest(fileDiff: fileDiff)]
+  }
 
   static var inspectsIgnoredPaths: Bool { false }
+  static var requiresSyntacticEvidence: Bool { false }
   static func settings(from context: RuleContext) -> RuleSettings {
     context.configuration.settings(
       for: ruleID,

@@ -17,7 +17,7 @@ public enum Severity: String, Codable, Comparable, CaseIterable, Sendable {
 }
 
 /// A single finding raised by a `Rule` while inspecting a diff.
-public struct Violation: Codable, Equatable {
+public struct Violation: Codable, Equatable, Sendable {
   public let ruleID: String
   public var severity: Severity
   public let file: String
