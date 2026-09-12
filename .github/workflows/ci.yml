@@ -6,10 +6,44 @@ on:
   pull_request:
 
 jobs:
+  pull-request-validation:
+    name: Validate pull request
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: macos-14
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify Conventional Commit subjects
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git log --format='%h%x09%s' "$BASE_SHA..$HEAD_SHA" | awk -F '\t' '
+            $2 !~ /^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([[:alnum:]_.\/-]+\))?(!)?: .+$/ {
+              print "Non-Conventional Commit subject: " $0
+              invalid = 1
+            }
+            END { exit invalid }
+          '
+
+      - name: Check Swift formatting
+        run: swift format lint --recursive Sources Tests Plugins Package.swift
+
+      - name: Run SwiftLint strictly
+        run: swiftlint lint --strict
+
   build-and-test:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
