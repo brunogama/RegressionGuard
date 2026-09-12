@@ -73,6 +73,10 @@ parser cannot represent newer syntax and would quietly stop seeing the construct
 
 `scripts/prepare-offline-validation.py` builds a disposable copy on that manifest, and refuses to
 run when a checkout the manifest names is missing or when the swift-syntax one is off that series.
+Build the copy with a plain `swift build --build-tests` and `swift test`: it already carries CI's
+strict flags on its own targets. Adding `-Xswiftc -warnings-as-errors` on the command line instead
+would reach the vendored checkouts, whose own deprecation warnings would fail a build this
+repository cannot fix.
 
 ## GoldenMaster: recording behavior instead of asserting it
 

@@ -99,6 +99,30 @@ And the old script left swift-argument-parser as a remote dependency, so the "of
 copy it produced still needed the network - it was never offline. The prepared copy now builds and
 runs all 235 tests under `--disable-automatic-resolution`.
 
+### Strictness is a manifest setting offline, not a command-line one
+
+The offline route cannot be built with `swift build -Xswiftc -warnings-as-errors`, and this is a
+property of path dependencies rather than anything swift-syntax introduced. SwiftPM suppresses
+warnings only for dependencies it fetched itself, so a path dependency compiles with its warnings
+visible, and a command-line `-Xswiftc` reaches every target in the graph. Measured on identical
+sources: swift-argument-parser 1.8.2 as a remote dependency builds silently, while the same commit
+as a path dependency raises four `_errorLabel` deprecation errors under that flag. No SwiftPM
+option scopes `-Xswiftc` to the root package, so the flag cannot stay on the command line.
+
+The prepared copy therefore carries `-warnings-as-errors -strict-concurrency=complete` on its own
+targets, appended to the manifest, where `package.targets` already means exactly this repository's
+targets and nothing else. That is what CI means by the flags: our code compiles warning-free. It is
+deliberately not a relaxation dressed up as a fix, and both halves were checked - a warning planted
+in `RegressionGuardKit` fails the offline build as an error, while the vendored checkouts' own 16
+warnings stay visible and non-fatal rather than being suppressed.
+
+`.unsafeFlags` is fine here and only here. It would make a package unusable as a versioned
+dependency, but it is written into the disposable copy rather than into `Package.local.swift`, so
+the tracked manifests stay publishable and stay mirrors of each other. Swift 6.1's
+`.treatAllWarnings(as:)` would express this without `.unsafeFlags`, but it needs a tools-version
+bump past the 6.0 `AGENTS.md` fixes, which raises the SwiftPM floor for every consumer - too much
+to spend on a validation harness.
+
 ### What it costs
 
 Measured on an Apple-silicon laptop under Swift 6.3.3, clean `swift build --build-tests` of a

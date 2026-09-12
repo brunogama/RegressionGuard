@@ -11,6 +11,12 @@ series `SyntaxGrammar.pinnedAlignmentSeries` pins.
 Vendoring itself needs the network and is therefore not done here; a missing
 checkout is reported with the clone command that supplies it.
 
+The copy carries CI's strict flags on its own targets, so build it plainly:
+`swift build --build-tests` and `swift test`. Do not add
+`-Xswiftc -warnings-as-errors` on the command line - that reaches the vendored
+checkouts too, and their own deprecations would fail a build this repository
+cannot fix.
+
 The shipping Package.swift is NOT changed. This is not a distributable build and
 cannot verify remote dependency resolution or macOS/Xcode integration.
 """
@@ -99,6 +105,22 @@ shutil.copytree(
 # The copy can live anywhere, so `../name` would no longer find the vendored checkout.
 for name in dependencies:
     manifest_text = manifest_text.replace(f'"../{name}"', f'"{vendor_root / name}"')
+
+# CI's strictness, applied in the manifest rather than on the command line, because the two are not
+# the same thing here. `swift build -Xswiftc -warnings-as-errors` reaches every target it compiles,
+# including the vendored checkouts - and SwiftPM only suppresses warnings for dependencies it
+# fetched itself, so a path dependency's own deprecations become this build's errors. There is no
+# SwiftPM flag that scopes the CLI option, so the copy carries the flags on its own targets, where
+# they mean what CI means by them: this repository's code compiles warning-free.
+manifest_text += """
+
+// OFFLINE VALIDATION ONLY: CI's strict flags, scoped to this package's own targets.
+for target in package.targets where target.type != .plugin {
+    target.swiftSettings = (target.swiftSettings ?? []) + [
+        .unsafeFlags(["-warnings-as-errors", "-strict-concurrency=complete"])
+    ]
+}
+"""
 (args.destination / "Package.swift").write_text(manifest_text)
 
 print(args.destination.resolve())
