@@ -35,7 +35,7 @@ jobs:
 
       - name: Check Swift formatting
         run: |
-          brew install swift-format
+          brew install swift-format swiftlint
           swift-format lint --recursive Sources Tests Plugins Package.swift
 
       - name: Run SwiftLint strictly
