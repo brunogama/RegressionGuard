@@ -1,0 +1,127 @@
+Title: Nested CLI package layout
+Labels: wayfinder:task
+Status: open
+Assignee: none
+Parent: Swift-syntax syntactic evidence map
+Blocked by: none
+
+## Question
+
+How does a consumer stop paying for the CLI's dependencies?
+
+The dependency posture decision put parsing behind the CLI so RegressionGuardKit would stay
+dependency-free, and it does. What that decision did not account for is that SwiftPM resolves the
+whole package graph regardless of which product a consumer uses, so a dependency-free *target* in a
+package that has dependencies is not a dependency-free *consumer*.
+
+Measured against the README's headline consumer - `GoldenMaster` in a test target, "only needed if
+you use golden-master snapshots" - on a cold cache:
+
+| | |
+|---|---|
+| objects fetched | 80,542 |
+| checkouts carried | 13.5 MiB (12 swift-syntax, 1.5 Commander) |
+| compile cost | zero; only GoldenMaster, MyApp and the test target are built |
+
+Resolution works and the build is correct, so nothing is broken. The cost is fetch and disk, paid
+by every consumer of a snapshot-testing library for a CLI they never build. That contradicts what
+`README.md` promises about the install.
+
+Resolve the package layout that removes it, and record what the move costs.
+
+## Proposed resolution
+
+Adopt swift-syntax's own layout: a nested package for the CLI, beside the published root package
+rather than inside it. That repository ships four of them - `CodeGeneration`, `Examples`,
+`SwiftParserCLI`, `SwiftSyntaxDevUtils` - and `SwiftParserCLI/Package.swift` is this exact case,
+declaring `.package(path: "..")` plus the CLI-only dependency its root manifest must not carry.
+
+The mechanism is verified rather than assumed, and by a measurement already in hand: the
+GoldenMaster consumer above resolved `commander` and `swift-syntax` and **not**
+`swift-argument-parser`, which swift-syntax's nested CLI package depends on. A nested package's
+dependencies do not reach consumers of the root.
+
+### Target layout
+
+| | root `Package.swift` | `CLI/Package.swift` |
+|---|---|---|
+| products | `GoldenMaster`, `RegressionGuardKit`, `RegressionGuardObserver`, `RegressionGuardPlugin` | `regression-guard`, `regression-guard-observer` |
+| targets | the three library targets | `regression-guard`, observer CLI, `RegressionGuardSyntax`, `RegressionGuardCommandLine` |
+| dependencies | none | `.package(path: "..")`, Commander, swift-syntax |
+| consumer cost | zero | never resolved |
+
+### What this retires
+
+- `Package.source.swift` disappears. The nested CLI package *is* the source build, so the manifest
+  added to keep source building possible alongside a binary CLI is no longer needed.
+- `Package.local.swift` collapses into the CLI package. Only the CLI has dependencies, so only the
+  CLI needs an offline variant, and a nested package can switch on an environment variable the way
+  `SwiftParserCLI` does with `SWIFTCI_USE_LOCAL_DEPS`. That is a legitimate use of an env-var
+  manifest precisely because no consumer ever resolves it - the objection that killed the idea for
+  the published manifest does not apply here.
+- `Package.binary.swift` should go with them. It describes a distribution that was never produced,
+  and the root manifest under this layout delivers what it was for.
+
+### The open decision: the command plugin
+
+`swift package regression-guard` needs the CLI in the consumer's graph, and a nested package cannot
+supply it. Two answers, and this ticket does not pick one:
+
+1. **Keep the plugin in the root, pointed at a `binaryTarget`.** `scripts/build-artifactbundle.py`
+   already produces the artifact - universal, 8.0 MiB zipped, verified to run. The cost is that a
+   binary artifact is very likely materialised at resolve time whether or not the plugin is used,
+   which would mean 8 MiB for every consumer instead of zero. **Unverified:** SwiftPM rejects
+   non-`https` URLs for binary targets, so this could not be measured locally. Settle it against a
+   real release before choosing.
+2. **Move the plugin into the CLI package.** Zero consumer cost, but `swift package
+   regression-guard` stops working for anyone who has not added that package - a documented feature
+   in `README.md` regressing.
+
+If (1) turns out to download for everyone, the choice is 8 MiB for all consumers against removing a
+feature, and that is a product decision rather than a technical one.
+
+## Migration steps
+
+1. Create `CLI/Package.swift` declaring `.package(path: "..")`, Commander, and swift-syntax.
+2. Move `Sources/regression-guard`, `Sources/RegressionGuard/ObserverCLI`,
+   `Sources/RegressionGuardSyntax`, and `Sources/RegressionGuardCommandLine` under `CLI/Sources/`.
+3. Move `Tests/RegressionGuardSyntaxTests` under `CLI/Tests/`.
+4. Move the two files in `Tests/RegressionGuardKitTests` that are coupled to the CLI, and only
+   those two. Established by inspection rather than assumed, because the suite's names mislead
+   here: `EnforcementWeakeningEndToEndTests` is the sole file that spawns
+   `.build/debug/regression-guard`, and `AdvisoryRuleAdoptionTests` is the sole file that reads a
+   CLI source file from disk (`Sources/regression-guard/InitCommand.swift`, for the default config
+   it asserts on). `EndToEndScratchRepoTests` sounds like a third and is not - it drives
+   `RegressionGuardRunner` through `@testable import RegressionGuardKit` and spawns nothing, so it
+   stays with the root package.
+5. Move `Vendor/` and the offline manifest into the CLI package, or leave `Vendor/` at the root and
+   reference it as `../Vendor/...` from the CLI manifest. The second keeps one vendoring location
+   for a repository that may later vendor something for the root; decide when implementing.
+6. Update `scripts/prepare-offline-validation.py`, `scripts/build-artifactbundle.py`, the `Justfile`
+   recipes, `ci.yml`, and `regression-guard-self-check.yml` for two package roots.
+7. Update `README.md`: the install promise, the repository layout section, and the plugin section
+   according to the plugin decision above.
+8. Delete `Package.source.swift` and `Package.binary.swift`.
+
+## Acceptance
+
+- A consumer package depending on the root and using only `GoldenMaster` resolves **zero**
+  dependencies, measured on a cold cache with `--cache-path`.
+- Both packages build and test under the repository's strict flags.
+- The offline route still builds and tests with no network, verified against an empty cache.
+- The plugin decision is recorded, with its consumer cost measured rather than estimated.
+
+## Risks
+
+- **Test-target split.** Step 4 moves tests between packages, and a test silently lost in the move
+  is exactly the regression this project exists to catch. The count must be reconciled across both
+  packages afterwards: 248 today. The split is smaller than it first looked - two files, not a
+  whole suite - but the two were found by grepping for `Process()` and for reads of
+  `Sources/regression-guard`, so a third coupling introduced before this lands would be missed by
+  anyone repeating the step from memory rather than repeating the grep.
+- **Two package roots in CI.** Every workflow, script, and recipe that assumes one package root has
+  to be found. A missed one fails loudly, so this is tedious rather than dangerous.
+- **The root package keeps a plugin whose executable lives elsewhere**, under option (1). That is an
+  unusual shape and needs a comment saying why, or the next reader will try to "fix" it.
+- **This does not reduce what the guard itself costs to build** - the CLI still compiles
+  swift-syntax. It moves who pays, not how much.

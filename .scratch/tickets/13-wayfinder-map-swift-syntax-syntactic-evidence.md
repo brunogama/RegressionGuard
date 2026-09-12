@@ -124,6 +124,10 @@ Find the way to swift-syntax-backed detection in RegressionGuard: syntactic evid
 - Promotion of advisory AST rule families to blocking, once per-rule false-positive rates exist. Depends on calibration data that cannot be gathered until the rules have shipped and been reviewed.
 - Whether syntactic evidence enables precise, evidence-bounded fix-its in the agent remediation prompt, beyond the deterministic hints already decided. A tree makes concrete rewrites expressible for the first time.
 - How syntactic evidence interacts with generated or vendored Swift that is in a guarded repository but not authored by it.
+- Whether the command plugin keeps working once the CLI moves to a nested package, and at what
+  consumer cost. Tracked in [Nested CLI package layout](25-nested-cli-package-layout.md), which
+  found that the dependency posture decision left every consumer fetching swift-syntax for a CLI
+  they never build - 80,542 objects for a project that only wants `GoldenMaster`.
 - Whether a run should cap the source it retains at once. The parse performance budget measured a retained tree at about 50x its source and a 15.31 MiB diff peaking at 781.9 MiB, which fits a standard runner but not a small container. A cap means degrading part of a change to line-based detection, which is a policy question the budget ticket deliberately did not answer.
 
 ## Out of scope
