@@ -130,16 +130,20 @@ public struct DisabledOrSkippedTestRule: Rule {
     path: String,
     severity: Severity
   ) -> [Violation] {
-    let extracted = extractFunctions(from: new)
-    let newFuncs = Dictionary(uniqueKeysWithValues: extracted.map { ($0.name, $0) })
+    // Overloads share a name, so a name maps to a whole overload set rather than one function.
+    // The set keeps its test identity as long as any member of it still reads as a test.
+    let survivesAsTest = Dictionary(
+      extractFunctions(from: new).map { ($0.name, $0.isTest) },
+      uniquingKeysWith: { $0 || $1 }
+    )
     var violations: [Violation] = []
 
     for oldFunc in extractFunctions(from: old) where oldFunc.isTest {
-      guard let newFunc = newFuncs[oldFunc.name] else {
+      guard let isStillTest = survivesAsTest[oldFunc.name] else {
         violations.append(removedFunctionViolation(oldFunc, path, severity))
         continue
       }
-      if !newFunc.isTest {
+      if !isStillTest {
         violations.append(lostIdentityViolation(oldFunc, path, severity))
       }
     }

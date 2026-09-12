@@ -1,14 +1,19 @@
-import XCTest
+import Foundation
+import Testing
 @testable import RegressionGuardKit
 
 /// Exercises the full pipeline (real `git`, real diffs, real `RuleEngine`) against a throwaway
 /// repository, simulating exactly the scenario this project exists for: an agent gets a test
 /// failing, and instead of fixing the bug, disables the test.
-final class EndToEndScratchRepoTests: XCTestCase {
+///
+/// A class rather than a struct so `deinit` can remove the repository; Swift Testing builds one
+/// instance per test, so every case gets a repository of its own.
+@Suite("End-to-end scratch repository tests")
+final class EndToEndScratchRepoTests {
 
-  private var repoURL: URL!
+  private let repoURL: URL
 
-  override func setUpWithError() throws {
+  init() throws {
     repoURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: repoURL, withIntermediateDirectories: true)
     try sh(["init", "-q", "-b", "main"])
@@ -16,7 +21,7 @@ final class EndToEndScratchRepoTests: XCTestCase {
     try sh(["config", "user.name", "Regression Guard Tests"])
   }
 
-  override func tearDownWithError() throws {
+  deinit {
     try? FileManager.default.removeItem(at: repoURL)
   }
 
@@ -34,7 +39,19 @@ final class EndToEndScratchRepoTests: XCTestCase {
     try contents.write(to: url, atomically: true, encoding: .utf8)
   }
 
-  func testCatchesAnAgentDisablingATestInsteadOfFixingIt() throws {
+  /// Stages everything, commits it with `message`, and returns the resulting SHA.
+  private func commit(_ message: String) throws -> String {
+    try sh(["add", "."])
+    try sh(["commit", "-q", "-m", message])
+    return try sh(["rev-parse", "HEAD"]).trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private func check(base: String, head: String) throws -> [Violation] {
+    try RegressionGuardRunner(repositoryDirectory: repoURL).check(base: base, head: head)
+  }
+
+  @Test("catches an agent disabling a test instead of fixing it")
+  func catchesADisabledTest() throws {
     try write(
       """
       import XCTest
@@ -46,9 +63,7 @@ final class EndToEndScratchRepoTests: XCTestCase {
       """,
       to: "Tests/MathTests.swift"
     )
-    try sh(["add", "."])
-    try sh(["commit", "-q", "-m", "Add commutativity test"])
-    let base = try sh(["rev-parse", "HEAD"]).trimmingCharacters(in: .whitespacesAndNewlines)
+    let base = try commit("Add commutativity test")
 
     // The "agent" gets stuck fixing `add` and disables the test instead.
     try write(
@@ -62,22 +77,18 @@ final class EndToEndScratchRepoTests: XCTestCase {
       """,
       to: "Tests/MathTests.swift"
     )
-    try sh(["add", "."])
-    try sh(["commit", "-q", "-m", "Fix flaky test"])
-    let head = try sh(["rev-parse", "HEAD"]).trimmingCharacters(in: .whitespacesAndNewlines)
+    let head = try commit("Fix flaky test")
 
-    let violations = try RegressionGuardRunner(repositoryDirectory: repoURL).check(
-      base: base,
-      head: head
-    )
+    let violations = try check(base: base, head: head)
 
-    XCTAssertTrue(
+    #expect(
       violations.contains { $0.ruleID == DisabledOrSkippedTestRule.ruleID },
       "expected a disabled_or_skipped_test violation, got: \(violations)"
     )
   }
 
-  func testCatchesARenamedTestFunction() throws {
+  @Test("catches a renamed test function")
+  func catchesARenamedTestFunction() throws {
     try write(
       """
       import XCTest
@@ -89,9 +100,7 @@ final class EndToEndScratchRepoTests: XCTestCase {
       """,
       to: "Tests/MathTests.swift"
     )
-    try sh(["add", "."])
-    try sh(["commit", "-q", "-m", "Add commutativity test"])
-    let base = try sh(["rev-parse", "HEAD"]).trimmingCharacters(in: .whitespacesAndNewlines)
+    let base = try commit("Add commutativity test")
 
     try write(
       """
@@ -104,23 +113,18 @@ final class EndToEndScratchRepoTests: XCTestCase {
       """,
       to: "Tests/MathTests.swift"
     )
-    try sh(["add", "."])
-    try sh(["commit", "-q", "-m", "Rename test function"])
-    let head = try sh(["rev-parse", "HEAD"]).trimmingCharacters(in: .whitespacesAndNewlines)
+    let head = try commit("Rename test function")
 
-    let violations = try RegressionGuardRunner(repositoryDirectory: repoURL).check(
-      base: base,
-      head: head
-    )
+    let violations = try check(base: base, head: head)
 
-    XCTAssertTrue(
+    #expect(
       violations.contains { $0.ruleID == DisabledOrSkippedTestRule.ruleID },
       "expected a disabled_or_skipped_test violation, got: \(violations)"
     )
   }
 
-  func testDoesNotFlagALegitimateFix() throws {
-
+  @Test("does not flag a legitimate fix")
+  func doesNotFlagALegitimateFix() throws {
     try write(
       """
       import XCTest
@@ -133,45 +137,113 @@ final class EndToEndScratchRepoTests: XCTestCase {
       to: "Tests/MathTests.swift"
     )
     try write("func add(_ a: Int, _ b: Int) -> Int { a - b }", to: "Sources/Math.swift")
-    try sh(["add", "."])
-    try sh(["commit", "-q", "-m", "Add (buggy) add function"])
-    let base = try sh(["rev-parse", "HEAD"]).trimmingCharacters(in: .whitespacesAndNewlines)
+    let base = try commit("Add (buggy) add function")
 
     // The real fix: correct the implementation, leave the test untouched.
     try write("func add(_ a: Int, _ b: Int) -> Int { a + b }", to: "Sources/Math.swift")
-    try sh(["add", "."])
-    try sh(["commit", "-q", "-m", "Fix add() to actually add"])
-    let head = try sh(["rev-parse", "HEAD"]).trimmingCharacters(in: .whitespacesAndNewlines)
+    let head = try commit("Fix add() to actually add")
 
-    let violations = try RegressionGuardRunner(repositoryDirectory: repoURL).check(
-      base: base,
-      head: head
+    let violations = try check(base: base, head: head)
+
+    #expect(violations.isEmpty, "expected no violations for a legitimate fix, got: \(violations)")
+  }
+
+  /// Overloads are ordinary Swift: two functions in one file can share a name. Keying the head
+  /// file's functions by name alone used to trap, so the guard crashed on any test file holding
+  /// an overload set instead of reporting on it.
+  @Test("survives overloaded function names in a test file")
+  func survivesOverloadedFunctionNames() throws {
+    try write(
+      """
+      import XCTest
+      final class RuleTests: XCTestCase {
+          func evaluate(one: Int) -> Int { one }
+          func evaluate(two: String) -> String { two }
+          func testUsesBothOverloads() {
+              XCTAssertEqual(evaluate(one: 1), 1)
+              XCTAssertEqual(evaluate(two: "a"), "a")
+          }
+      }
+      """,
+      to: "Tests/RuleTests.swift"
     )
-    XCTAssertTrue(
-      violations.isEmpty,
-      "expected no violations for a legitimate fix, got: \(violations)"
+    let base = try commit("Add overloaded helpers")
+
+    try write(
+      """
+      import XCTest
+      final class RuleTests: XCTestCase {
+          func evaluate(one: Int) -> Int { one }
+          func evaluate(two: String) -> String { two }
+          func testUsesBothOverloads() {
+              XCTAssertEqual(evaluate(one: 1), 1)
+              XCTAssertEqual(evaluate(two: "b"), "b")
+          }
+      }
+      """,
+      to: "Tests/RuleTests.swift"
+    )
+    let head = try commit("Adjust the second overload's expectation")
+
+    let violations = try check(base: base, head: head)
+
+    #expect(
+      !violations.contains { $0.ruleID == DisabledOrSkippedTestRule.ruleID },
+      "an untouched test function should not be reported, got: \(violations)"
     )
   }
 
-  func testHonorsApprovalMarkerForCharacterizationDrift() throws {
+  /// A test that shares its name with a plain helper still has to be caught when it loses its
+  /// `@Test` attribute: the overload set no longer runs as a test at all.
+  @Test("catches lost test identity in an overload set")
+  func catchesLostTestIdentityInAnOverloadSet() throws {
+    try write(
+      """
+      import Testing
+      struct RuleTests {
+          func check(one: Int) -> Int { one }
+          @Test
+          func check() { #expect(add(2, 3) == 5) }
+      }
+      """,
+      to: "Tests/RuleTests.swift"
+    )
+    let base = try commit("Add a test beside a same-named helper")
+
+    try write(
+      """
+      import Testing
+      struct RuleTests {
+          func check(one: Int) -> Int { one }
+          func check() { #expect(add(2, 3) == 5) }
+      }
+      """,
+      to: "Tests/RuleTests.swift"
+    )
+    let head = try commit("Drop the test attribute")
+
+    let violations = try check(base: base, head: head)
+
+    #expect(
+      violations.contains { $0.ruleID == DisabledOrSkippedTestRule.ruleID },
+      "expected a disabled_or_skipped_test violation, got: \(violations)"
+    )
+  }
+
+  @Test("honors the approval marker for characterization drift")
+  func honorsApprovalMarkerForCharacterizationDrift() throws {
     try write("original output", to: "Sources/__GoldenMasters__/testRender.snapshot.txt")
-    try sh(["add", "."])
-    try sh(["commit", "-q", "-m", "Record baseline"])
-    let base = try sh(["rev-parse", "HEAD"]).trimmingCharacters(in: .whitespacesAndNewlines)
+    let base = try commit("Record baseline")
 
     try write(
       "intentionally updated output",
       to: "Sources/__GoldenMasters__/testRender.snapshot.txt"
     )
-    try sh(["add", "."])
-    try sh(["commit", "-q", "-m", "Update rendering\n\nregression-guard:approve"])
-    let head = try sh(["rev-parse", "HEAD"]).trimmingCharacters(in: .whitespacesAndNewlines)
+    let head = try commit("Update rendering\n\nregression-guard:approve")
 
-    let violations = try RegressionGuardRunner(repositoryDirectory: repoURL).check(
-      base: base,
-      head: head
-    )
-    XCTAssertTrue(
+    let violations = try check(base: base, head: head)
+
+    #expect(
       violations.isEmpty,
       "approved baseline update should not be flagged, got: \(violations)"
     )
