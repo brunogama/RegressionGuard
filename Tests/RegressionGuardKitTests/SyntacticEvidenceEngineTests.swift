@@ -68,6 +68,13 @@ struct SyntacticEvidenceEngineTests {
     #expect(provider.callCount == 0)
   }
 
+  /// Guards the parse budget's first clause.
+  ///
+  /// One base-source read per run, whatever the file count, measured at 286x on a 504-file diff
+  /// with the multiplier growing as the diff does. It is the only clause worth a test: the other
+  /// two are proportions that the harness in `.scratch/prototypes/parse-performance-budget/`
+  /// re-measures, because a wall-clock threshold in this suite would fail for reasons that have
+  /// nothing to do with the code.
   @Test("every requested file is fetched in a single batched call")
   func requestsAreBatchedIntoOneCall() async {
     let provider = RecordingProvider()

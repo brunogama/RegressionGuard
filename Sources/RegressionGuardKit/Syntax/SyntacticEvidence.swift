@@ -160,6 +160,11 @@ public struct SyntacticFileEvidence: Codable, Equatable, Sendable {
 /// A path that is absent from `files` was never requested, which is a different thing from a
 /// requested file whose trees came back unavailable. Rules read through `evidence(for:)` so the
 /// two cannot be confused.
+///
+/// Every tree stays alive for the whole run, which is what makes memory - not time - the tight
+/// side of the parse budget. Measured, a retained tree costs about 50x the source it came from:
+/// 15.31 MiB of parsed Swift peaked at 781.9 MiB resident. The budget allows 10 MiB plus 60x the
+/// source held at once, so what rules ask for is what this costs, and the size of the diff is not.
 public struct SyntacticEvidence: Codable, Equatable, Sendable {
   public static let none = Self(files: [])
 
@@ -263,9 +268,12 @@ public struct SyntacticEvidenceRequest: Codable, Equatable, Hashable, Sendable {
 
 /// Turns requests into parsed evidence.
 ///
-/// Deliberately batched. Parsing is effectively free at roughly 0.125 ms per file, while reading
-/// one file at the base ref costs about 9 ms of subprocess, so a per-file interface would make the
-/// subprocess the cost of the whole feature. One call per run, all files at once.
+/// Deliberately batched, and the batching is the budget rather than an optimization. Measured on
+/// swift-syntax 603.0.2 over a 504-file diff: one `git cat-file --batch` for the whole set costs
+/// 111 ms, while one `git show` per file costs 31.7 s - 286x, because per-file fetch is linear in
+/// the file count while a batch is one spawn plus about 0.08 ms an object. Parsing the same set
+/// costs 0.62 ms per file, so a per-file interface would make the subprocess the entire cost of
+/// the feature. One call per run, all files at once.
 ///
 /// RegressionGuardKit declares this and never implements it: it has no package dependencies and
 /// cannot parse Swift. The CLI owns the parsing target and injects the implementation.
