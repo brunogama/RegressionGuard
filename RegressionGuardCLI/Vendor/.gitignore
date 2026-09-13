@@ -1,0 +1,8 @@
+# These are committed git repositories, not build output, and every file in them is load-bearing.
+#
+# Nothing here may be excluded - including by a contributor's global ignore file, which is how this
+# broke: a `tags` entry, the usual one for ctags output, silently dropped `refs/tags/` from both
+# vendored repositories. Git does not track empty directories either, so `refs/` and `objects/info/`
+# went with them and a fresh clone had no repository here at all. The offline build failed for
+# everyone but the machine that created the bare clones, which still had the directories on disk.
+!*
