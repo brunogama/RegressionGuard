@@ -7,8 +7,12 @@ import Testing
 ///
 /// A class rather than a struct so `deinit` removes the repository; Swift Testing builds one
 /// instance per test, so every case gets a repository of its own.
+///
+/// `Sendable` because a synchronous test case reaches its suite from a nonisolated context, and
+/// the conformance is checked rather than asserted: the only stored property is a `URL`. Swift
+/// 6.0 rejects the suite without it and newer compilers do not, so this failed only in CI.
 @Suite("Git syntactic evidence provider tests")
-final class GitSyntacticEvidenceProviderTests {
+final class GitSyntacticEvidenceProviderTests: Sendable {
 
   private let repositoryURL: URL
 
