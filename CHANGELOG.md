@@ -7,16 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- The vendored repositories under `RegressionGuardCLI/Vendor/` are now complete in a clone. Git
-  does not track empty directories, so `refs/heads`, `refs/tags` and `objects/info` were never
-  committed, and a global ignore file's usual `tags` entry took the loose tag refs with it - so
-  `REGRESSIONGUARD_OFFLINE=1` worked only on a machine that had created the bare clones itself.
-  Consumers are unaffected either way; this is the offline build for anyone working in a clone.
-- The CLI package's tests compile under Swift 6.0 again. A synchronous test case reaches its suite
-  from a nonisolated context, which 6.0 rejects for a non-Sendable suite type and 6.3 allows.
-
 ## [0.1.0] - 2026-09-12
 
 First release.
